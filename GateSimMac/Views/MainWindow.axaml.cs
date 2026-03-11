@@ -89,7 +89,7 @@ public partial class MainWindow : Window
         ["Nand"] = "M 15,17 v 30 h 15 a 2,2 1 0 0 0,-30 h -15 M 46,33.5 a 3,3 1 1 1 0.1,0.1",
         ["Xor"] = "M 13,47 c 5,-10 5,-20 0,-30 M 13,17 c 5,10 5,20 0,30 M 18,17 h 7 c 10,0 20,5 25,15 c -5,10 -15,15 -25,15 h -7 c 5,-10 5,-20 0,-30",
         ["Xnor"] = "M 13,47 c 5,-10 5,-20 0,-30 M 13,17 c 5,10 5,20 0,30 M 18,17 h 2 c 10,0 20,5 25,15 c -5,10 -15,15 -25,15 h -2 c 5,-10 5,-20 0,-30 M 46,33.5 a 3,3 1 1 1 0.1,0.1",
-        ["Buffer"] = "M 8,8 L 8,24 L 24,16 Z",
+        ["Buffer"] = "M 12,12 v 8 l 8,-4 l -8,-4",
     };
 
     public MainWindow() : this(Array.Empty<string>())
@@ -709,31 +709,27 @@ public partial class MainWindow : Window
             pathData = GatePath["And"];
         }
 
-        bool isBuffer = gate.Type == "Buffer";
-        double nominal = isBuffer ? 32 : 64;
-
         Avalonia.Controls.Shapes.Path shape = new()
         {
             Data = Geometry.Parse(pathData),
-            Stretch = Stretch.Fill,
-            Width = nominal,
-            Height = nominal,
             Stroke = Brushes.Black,
             StrokeThickness = 2,
             Fill = Brushes.White,
             StrokeLineCap = PenLineCap.Square,
         };
 
-        double left = (gate.Width - nominal) / 2.0;
-        double top = (gate.Height - nominal) / 2.0;
-        Canvas.SetLeft(shape, left);
-        Canvas.SetTop(shape, top);
-
         if (gate.Type is "And" or "Or" or "Nand" or "Nor")
         {
             // Preserve classic look: these shapes expand vertically with additional ports.
             double scaleY = Math.Max(1.0, (gate.Height - 32.0) / 32.0);
-            shape.RenderTransform = new ScaleTransform(1.0, scaleY);
+            shape.RenderTransform = new TransformGroup
+            {
+                Children = new Transforms
+                {
+                    new ScaleTransform(1.0, scaleY),
+                    new TranslateTransform(0, 15.0 * (1.0 - scaleY)),
+                },
+            };
         }
 
         surface.Children.Add(shape);
@@ -743,43 +739,41 @@ public partial class MainWindow : Window
     {
         Border body = new()
         {
-            Width = Math.Max(36, gate.Width - 12),
-            Height = Math.Max(30, gate.Height - 20),
+            Width = Math.Max(20, gate.Width - 24),
+            Height = Math.Max(20, gate.Height - 34),
             BorderBrush = Brushes.Black,
             BorderThickness = new Thickness(2),
             Background = Brushes.White,
-            CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(4),
         };
+
+        Canvas.SetLeft(body, 12);
+        Canvas.SetTop(body, 17);
+        surface.Children.Add(body);
 
         TextBlock name = new()
         {
+            Width = Math.Max(20, gate.Width - 40),
+            Height = 24,
             Text = gate.Name,
-            TextWrapping = TextWrapping.Wrap,
             TextAlignment = TextAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
-            FontWeight = FontWeight.SemiBold,
         };
-        body.Child = name;
-
-        Canvas.SetLeft(body, 6);
-        Canvas.SetTop(body, 10);
-        surface.Children.Add(body);
-
+        Canvas.SetLeft(name, 20);
+        Canvas.SetTop(name, (gate.Height / 2) - 12);
+        surface.Children.Add(name);
     }
 
     private void DrawComment(Canvas surface, GatePlacement gate)
     {
-        Border bubble = new()
+        Avalonia.Controls.Shapes.Path bubble = new()
         {
-            Width = Math.Max(64, gate.Width - 8),
-            Height = Math.Max(34, gate.Height - 8),
-            BorderBrush = Brushes.Black,
-            BorderThickness = new Thickness(2),
-            Background = Brushes.White,
-            CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(8),
+            Data = Geometry.Parse(BuildCommentBubblePath(
+                Math.Max(20, gate.Width - 30),
+                Math.Max(20, gate.Height - 30))),
+            Stroke = Brushes.Black,
+            StrokeThickness = 2,
+            Fill = Brushes.White,
         };
 
         TextBox text = new()
@@ -789,12 +783,16 @@ public partial class MainWindow : Window
             AcceptsReturn = true,
             BorderThickness = new Thickness(0),
             Background = Brushes.Transparent,
+            Width = Math.Max(16, gate.Width - 40),
+            Height = Math.Max(16, gate.Height - 40),
         };
-        bubble.Child = text;
 
-        Canvas.SetLeft(bubble, 4);
-        Canvas.SetTop(bubble, 4);
+        Canvas.SetLeft(bubble, 15);
+        Canvas.SetTop(bubble, 15);
         surface.Children.Add(bubble);
+        Canvas.SetLeft(text, 20);
+        Canvas.SetTop(text, 20);
+        surface.Children.Add(text);
     }
 
     private void DrawUserInput(Canvas surface, GatePlacement gate, UserInput input)
@@ -899,18 +897,24 @@ public partial class MainWindow : Window
 
         TextBox editor = new()
         {
-            Width = Math.Max(72, gate.Width - 40),
-            Height = 22,
+            Width = Math.Max(24, gate.Width - 40),
+            Height = 18,
             Text = input.Value,
             TextAlignment = TextAlignment.Center,
             FontFamily = FontFamily.Parse("Consolas, Menlo, monospace"),
+            FontSize = 12,
+            Background = Brushes.AntiqueWhite,
         };
 
         Button rep = new()
         {
-            Width = 52,
-            Height = 20,
+            Width = editor.Width,
+            Height = 14,
             Content = ShortRepresentation(input.SelectedRepresentation),
+            FontSize = 9,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
         };
 
         editor.KeyDown += (_, args) =>
@@ -930,10 +934,11 @@ public partial class MainWindow : Window
             RefreshLiveState();
         };
 
-        Canvas.SetLeft(editor, (gate.Width - editor.Width) / 2);
-        Canvas.SetTop(editor, (gate.Height / 2) - 18);
-        Canvas.SetLeft(rep, (gate.Width - rep.Width) / 2);
-        Canvas.SetTop(rep, (gate.Height / 2) + 8);
+        double left = (gate.Width - editor.Width) / 2;
+        Canvas.SetLeft(editor, left);
+        Canvas.SetTop(editor, 20);
+        Canvas.SetLeft(rep, left);
+        Canvas.SetTop(rep, 36);
 
         surface.Children.Add(editor);
         surface.Children.Add(rep);
@@ -948,14 +953,14 @@ public partial class MainWindow : Window
 
         TextBlock state = new()
         {
-            Width = Math.Max(72, gate.Width - 40),
+            Width = Math.Max(24, gate.Width - 40),
             TextAlignment = TextAlignment.Center,
             FontFamily = FontFamily.Parse("Consolas, Menlo, monospace"),
             FontSize = 12,
         };
 
         Canvas.SetLeft(state, (gate.Width - state.Width) / 2);
-        Canvas.SetTop(state, (gate.Height / 2) - 8);
+        Canvas.SetTop(state, 23);
 
         surface.Children.Add(state);
         _gateStates[gate] = state;
@@ -965,39 +970,27 @@ public partial class MainWindow : Window
     {
         Border body = new()
         {
-            Width = Math.Max(48, gate.Width - 18),
-            Height = Math.Max(40, gate.Height - 18),
+            Width = Math.Max(20, gate.Width - 30),
+            Height = Math.Max(20, gate.Height - 30),
             BorderBrush = Brushes.Black,
             BorderThickness = new Thickness(2),
             Background = Brushes.White,
-            CornerRadius = new CornerRadius(2),
         };
 
-        Canvas.SetLeft(body, 9);
-        Canvas.SetTop(body, 9);
+        Canvas.SetLeft(body, 15);
+        Canvas.SetTop(body, 15);
         surface.Children.Add(body);
-
-        TextBlock label = new()
-        {
-            Width = gate.Width,
-            Text = $"{title} ({bits}b)",
-            TextAlignment = TextAlignment.Center,
-            FontSize = 11,
-        };
-        Canvas.SetTop(label, 2);
-        surface.Children.Add(label);
     }
 
     private void DrawClock(Canvas surface, GatePlacement gate, Clock clock)
     {
         Border body = new()
         {
-            Width = Math.Max(48, gate.Width - 10),
-            Height = Math.Max(40, gate.Height - 24),
+            Width = Math.Max(22, gate.Width - 10),
+            Height = Math.Max(20, gate.Height - 34),
             BorderBrush = Brushes.Black,
             BorderThickness = new Thickness(2),
             Background = Brushes.White,
-            CornerRadius = new CornerRadius(2),
         };
 
         Canvas.SetLeft(body, 5);
@@ -1009,21 +1002,18 @@ public partial class MainWindow : Window
             Data = Geometry.Parse("M 10,22 h 5 v 5 h -5 v 5 h 5 v 5 h -5 v 5 h 5"),
             Stroke = Brushes.Black,
             StrokeThickness = 2,
-            Width = 36,
-            Height = 30,
-            Stretch = Stretch.Fill,
         };
-        Canvas.SetLeft(wave, 8);
-        Canvas.SetTop(wave, 20);
         surface.Children.Add(wave);
 
         TextBox editor = new()
         {
-            Width = 56,
-            Height = 22,
+            Width = 34,
+            Height = 18,
             Text = clock.Milliseconds.ToString(),
             TextAlignment = TextAlignment.Center,
             FontFamily = FontFamily.Parse("Consolas, Menlo, monospace"),
+            FontSize = 12,
+            Background = Brushes.AntiqueWhite,
         };
         editor.KeyDown += (_, args) =>
         {
@@ -1034,8 +1024,8 @@ public partial class MainWindow : Window
         };
         editor.LostFocus += (_, _) => ApplyClockValue(clock, editor.Text);
 
-        Canvas.SetLeft(editor, gate.Width - editor.Width - 8);
-        Canvas.SetTop(editor, (gate.Height - editor.Height) / 2);
+        Canvas.SetLeft(editor, Math.Max(8, gate.Width - editor.Width - 10));
+        Canvas.SetTop(editor, 23);
         surface.Children.Add(editor);
 
         _clockEditors[clock] = editor;
@@ -1851,7 +1841,7 @@ public partial class MainWindow : Window
 
         TerminalLayout terminal = gate.GetTerminal(isInput, port);
         visual.Root.RenderTransformOrigin = new RelativePoint(0.5, 5.0 / 22.0, RelativeUnit.Relative);
-        visual.Root.RenderTransform = new RotateTransform(PortSideToAngle(terminal.Side));
+        visual.Root.RenderTransform = new RotateTransform(PortSideToAngle(terminal.Side) + gate.Angle);
     }
 
     private void UpdateAllWireGeometry()
@@ -1983,6 +1973,40 @@ public partial class MainWindow : Window
         }
 
         return name.Substring(0, 1).ToUpperInvariant();
+    }
+
+    private static string BuildCommentBubblePath(double width, double height)
+    {
+        string path = "M0,0 ";
+
+        for (int i = 20; i < width - 20; i += 9)
+        {
+            path += "a 5,5 45 1 1 9,0 ";
+        }
+
+        path += "a 5,5 45 1 1 9,0 ";
+
+        for (int i = 20; i < height - 20; i += 9)
+        {
+            path += "a 5,5 45 1 1 0,9 ";
+        }
+
+        path += "a 5,5 45 1 1 0,9 ";
+
+        for (int i = 20; i < width - 20; i += 9)
+        {
+            path += "a 5,5 45 1 1 -9,0 ";
+        }
+
+        path += "a 5,5 45 1 1 -9,0 ";
+
+        for (int i = 20; i < height - 20; i += 9)
+        {
+            path += "a 5,5 45 1 1 0,-9 ";
+        }
+
+        path += "a 5,5 45 1 1 0,-9 ";
+        return path;
     }
 
     private Point GetTerminalPoint(GatePlacement gate, bool isInput, int portIndex)
