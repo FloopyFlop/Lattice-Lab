@@ -98,7 +98,30 @@ public static class LegacyCircuitLoader
             SourcePath = path,
             Circuits = circuits,
             DefaultCircuitIndex = defaultCircuitIndex.Value,
+            NamedIcTemplates = namedIcs
+                .OrderBy(kvp => kvp.Key, StringComparer.Ordinal)
+                .Select(kvp => new NamedIcTemplate
+                {
+                    Name = kvp.Key,
+                    Template = kvp.Value.Template,
+                    Terminals = CloneTerminalLayouts(kvp.Value.Terminals),
+                })
+                .ToList(),
         };
+    }
+
+    private static List<TerminalLayout> CloneTerminalLayouts(IReadOnlyList<TerminalLayout> terminals)
+    {
+        return terminals
+            .Select(t => new TerminalLayout
+            {
+                IsInput = t.IsInput,
+                PortIndex = t.PortIndex,
+                Side = t.Side,
+                SideOrdinal = t.SideOrdinal,
+                SideCount = t.SideCount,
+            })
+            .ToList();
     }
 
     private static LoadedCircuit ToLoadedCircuit(string displayName, bool isNamed, BuiltCircuit built)

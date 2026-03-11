@@ -81,4 +81,12 @@ public sealed class LoadedProject
     public required string SourcePath { get; init; }
     public required List<LoadedCircuit> Circuits { get; init; }
     public required int DefaultCircuitIndex { get; init; }
+    public required List<NamedIcTemplate> NamedIcTemplates { get; init; }
+}
+
+public sealed class NamedIcTemplate
+{
+    public required string Name { get; init; }
+    public required IC Template { get; init; }
+    public required List<TerminalLayout> Terminals { get; init; }
 }

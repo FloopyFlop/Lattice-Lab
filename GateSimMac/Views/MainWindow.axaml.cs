@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<NumericInput, TextBox> _numericEditors = new();
     private readonly Dictionary<NumericInput, Button> _numericRepButtons = new();
     private readonly Dictionary<Clock, TextBox> _clockEditors = new();
+    private readonly Dictionary<string, NamedIcTemplate> _namedIcTemplates = new(StringComparer.Ordinal);
 
     private readonly Dictionary<(GatePlacement Gate, bool IsInput, int Port), TerminalVisual> _terminalVisuals = new();
 
@@ -60,6 +61,13 @@ public partial class MainWindow : Window
     private Point _lastCanvasPointer;
     private bool _hasLastCanvasPointer;
 
+    private string _paletteDragType;
+    private Button _paletteDragButton;
+    private bool _palettePointerDown;
+    private bool _paletteDragInProgress;
+    private bool _suppressNextPaletteClick;
+    private Point _paletteDragStart;
+
     private bool _isSwitchingCircuit;
     private bool _showTrueFalse = true;
     private bool _endUserMode;
@@ -69,6 +77,36 @@ public partial class MainWindow : Window
     private double _wireFlowOffset;
 
     private static bool _clockPrecessionInitialized;
+
+    private const string PaletteIdleText = "Palette: click to place, or drag onto canvas.";
+    private const string PaletteGateTypeDataFormat = "GateType";
+    private const string IcPalettePrefix = "IC:";
+
+    private static readonly (string Type, string Label)[] BasicPaletteItems =
+    {
+        ("Not", "NOT"),
+        ("And", "AND"),
+        ("Or", "OR"),
+        ("Buffer", "BUFFER"),
+    };
+
+    private static readonly (string Type, string Label)[] CompoundPaletteItems =
+    {
+        ("Nand", "NAND"),
+        ("Nor", "NOR"),
+        ("Xor", "XOR"),
+        ("Xnor", "XNOR"),
+    };
+
+    private static readonly (string Type, string Label)[] IoPaletteItems =
+    {
+        ("UserInput", "User Input"),
+        ("UserOutput", "User Output"),
+        ("NumericInput", "Numeric Input"),
+        ("NumericOutput", "Numeric Output"),
+        ("Clock", "Clock"),
+        ("Comment", "Comment"),
+    };
 
     private sealed class WireVisual
     {
@@ -82,6 +120,14 @@ public partial class MainWindow : Window
         public required Canvas Root { get; init; }
         public required Ellipse Dot { get; init; }
         public required Polygon Arrow { get; init; }
+    }
+
+    private sealed class IcTerminalSeed
+    {
+        public required AbstractGate Gate { get; init; }
+        public required bool IsInput { get; init; }
+        public required PortSide Side { get; init; }
+        public required double Offset { get; init; }
     }
 
     private static readonly Dictionary<string, string> GatePath = new(StringComparer.Ordinal)
@@ -129,7 +175,13 @@ public partial class MainWindow : Window
         _snapToGrid = SnapGridToggle.IsChecked ?? false;
         _lastCanvasPointer = new Point(CircuitCanvas.Width / 2.0, CircuitCanvas.Height / 2.0);
 
+        InitializePalette();
+        ResetPaletteStatus();
+
         Gestures.AddPointerTouchPadGestureMagnifyHandler(CircuitCanvas, CircuitCanvas_PointerTouchPadGestureMagnify);
+        DragDrop.SetAllowDrop(CircuitCanvas, true);
+        CircuitCanvas.AddHandler(DragDrop.DragOverEvent, CircuitCanvas_DragOver);
+        CircuitCanvas.AddHandler(DragDrop.DropEvent, CircuitCanvas_Drop);
 
         if (args.Length > 0 && File.Exists(args[0]))
         {
@@ -241,6 +293,618 @@ public partial class MainWindow : Window
         DeleteGate(_selectedGate);
     }
 
+    private void CreateComponentButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCircuit == null)
+        {
+            return;
+        }
+
+        try
+        {
+            string name = GenerateAvailableNamedIcName("Untitled");
+            NamedIcTemplate created = BuildNamedIcTemplateFromActiveCircuit(name);
+            _namedIcTemplates[created.Name] = created;
+            RebuildCustomPalette();
+
+            _pendingAddGateType = $"{IcPalettePrefix}{created.Name}";
+            PaletteStatusText.Text = $"Palette: placing {created.Name}. Click on canvas to add.";
+            StatusText.Text = "Custom component created";
+            InfoLineText.Text = $"Created custom component '{created.Name}'.";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "Create component failed";
+            InfoText.Text = ex.Message;
+        }
+    }
+
+    private void InitializePalette()
+    {
+        PopulatePalettePanel(BasicPalettePanel, BasicPaletteItems);
+        PopulatePalettePanel(CompoundPalettePanel, CompoundPaletteItems);
+        PopulatePalettePanel(IoPalettePanel, IoPaletteItems);
+        RebuildCustomPalette();
+    }
+
+    private void PopulatePalettePanel(Panel panel, IEnumerable<(string Type, string Label)> entries)
+    {
+        panel.Children.Clear();
+        foreach ((string type, string label) in entries)
+        {
+            panel.Children.Add(CreatePaletteButton(type, label));
+        }
+    }
+
+    private Button CreatePaletteButton(string type, string label)
+    {
+        Button button = new()
+        {
+            Tag = type,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(6, 4),
+        };
+
+        button.Content = BuildPaletteButtonContent(type, label);
+        button.Click += PaletteGate_Click;
+        button.PointerPressed += PaletteButton_PointerPressed;
+        button.PointerMoved += PaletteButton_PointerMoved;
+        button.PointerReleased += PaletteButton_PointerReleased;
+
+        return button;
+    }
+
+    private static Grid BuildPaletteButtonContent(string type, string label)
+    {
+        Grid content = new()
+        {
+            ColumnDefinitions = new ColumnDefinitions("44,*"),
+        };
+
+        Border glyphFrame = new()
+        {
+            Width = 40,
+            Height = 28,
+            BorderBrush = new SolidColorBrush(Color.Parse("#FFD0D0D0")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Background = Brushes.White,
+            Child = BuildPaletteGlyph(type, label),
+        };
+
+        TextBlock text = new()
+        {
+            Text = label,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0),
+            FontSize = 12,
+        };
+
+        Grid.SetColumn(glyphFrame, 0);
+        Grid.SetColumn(text, 1);
+        content.Children.Add(glyphFrame);
+        content.Children.Add(text);
+
+        return content;
+    }
+
+    private static Viewbox BuildPaletteGlyph(string type, string label)
+    {
+        string normalizedType = NormalizePaletteType(type);
+
+        Canvas canvas = new()
+        {
+            Width = 64,
+            Height = 64,
+            Background = Brushes.Transparent,
+        };
+
+        switch (normalizedType)
+        {
+            case "And":
+            case "Not":
+            case "Or":
+            case "Nand":
+            case "Nor":
+            case "Xor":
+            case "Xnor":
+            case "Buffer":
+            {
+                string pathData = normalizedType == "Buffer"
+                    ? "M 18,16 L 18,48 L 48,32 Z"
+                    : GatePath[normalizedType];
+                Avalonia.Controls.Shapes.Path path = new()
+                {
+                    Data = Geometry.Parse(pathData),
+                    Stroke = Brushes.Black,
+                    Fill = Brushes.White,
+                    StrokeThickness = 2,
+                };
+                canvas.Children.Add(path);
+                break;
+            }
+            case "UserInput":
+            {
+                Border outer = new()
+                {
+                    Width = 34,
+                    Height = 34,
+                    BorderBrush = Brushes.Black,
+                    BorderThickness = new Thickness(2),
+                    Background = Brushes.White,
+                };
+                Border inner = new()
+                {
+                    Width = 22,
+                    Height = 22,
+                    BorderBrush = Brushes.Black,
+                    BorderThickness = new Thickness(2),
+                    Background = Brushes.Beige,
+                };
+                Canvas.SetLeft(outer, 15);
+                Canvas.SetTop(outer, 15);
+                Canvas.SetLeft(inner, 21);
+                Canvas.SetTop(inner, 21);
+                canvas.Children.Add(outer);
+                canvas.Children.Add(inner);
+                break;
+            }
+            case "UserOutput":
+            {
+                Ellipse outer = new()
+                {
+                    Width = 34,
+                    Height = 34,
+                    Stroke = Brushes.Black,
+                    StrokeThickness = 2,
+                    Fill = Brushes.White,
+                };
+                Ellipse inner = new()
+                {
+                    Width = 22,
+                    Height = 22,
+                    Stroke = Brushes.Black,
+                    StrokeThickness = 2,
+                    Fill = Brushes.Beige,
+                };
+                Canvas.SetLeft(outer, 15);
+                Canvas.SetTop(outer, 15);
+                Canvas.SetLeft(inner, 21);
+                Canvas.SetTop(inner, 21);
+                canvas.Children.Add(outer);
+                canvas.Children.Add(inner);
+                break;
+            }
+            case "NumericInput":
+            case "NumericOutput":
+            {
+                Border body = new()
+                {
+                    Width = 42,
+                    Height = 30,
+                    BorderBrush = Brushes.Black,
+                    BorderThickness = new Thickness(2),
+                    Background = Brushes.White,
+                };
+                TextBlock txt = new()
+                {
+                    Text = normalizedType == "NumericInput" ? "IN" : "OUT",
+                    FontSize = 10,
+                    FontWeight = FontWeight.Bold,
+                    Width = 42,
+                    TextAlignment = TextAlignment.Center,
+                };
+                Canvas.SetLeft(body, 11);
+                Canvas.SetTop(body, 17);
+                Canvas.SetLeft(txt, 11);
+                Canvas.SetTop(txt, 27);
+                canvas.Children.Add(body);
+                canvas.Children.Add(txt);
+                break;
+            }
+            case "Clock":
+            {
+                Border body = new()
+                {
+                    Width = 42,
+                    Height = 30,
+                    BorderBrush = Brushes.Black,
+                    BorderThickness = new Thickness(2),
+                    Background = Brushes.White,
+                };
+                Avalonia.Controls.Shapes.Path wave = new()
+                {
+                    Data = Geometry.Parse("M 16,30 h 6 v 6 h -6 v 6 h 6 v 6 h -6 v 6 h 6"),
+                    Stroke = Brushes.Black,
+                    StrokeThickness = 2,
+                };
+                Canvas.SetLeft(body, 11);
+                Canvas.SetTop(body, 17);
+                canvas.Children.Add(body);
+                canvas.Children.Add(wave);
+                break;
+            }
+            case "Comment":
+            {
+                Avalonia.Controls.Shapes.Path bubble = new()
+                {
+                    Data = Geometry.Parse(BuildCommentBubblePath(42, 28)),
+                    Stroke = Brushes.Black,
+                    StrokeThickness = 2,
+                    Fill = Brushes.White,
+                };
+                Canvas.SetLeft(bubble, 11);
+                Canvas.SetTop(bubble, 18);
+                canvas.Children.Add(bubble);
+                break;
+            }
+            case "IC":
+            {
+                Border body = new()
+                {
+                    Width = 42,
+                    Height = 30,
+                    BorderBrush = Brushes.Black,
+                    BorderThickness = new Thickness(2),
+                    Background = Brushes.White,
+                };
+                TextBlock txt = new()
+                {
+                    Text = label.Length <= 4 ? label : label.Substring(0, 4).ToUpperInvariant(),
+                    FontSize = 9,
+                    FontWeight = FontWeight.Bold,
+                    Width = 42,
+                    TextAlignment = TextAlignment.Center,
+                };
+                Canvas.SetLeft(body, 11);
+                Canvas.SetTop(body, 17);
+                Canvas.SetLeft(txt, 11);
+                Canvas.SetTop(txt, 27);
+                canvas.Children.Add(body);
+                canvas.Children.Add(txt);
+                break;
+            }
+        }
+
+        return new Viewbox
+        {
+            Width = 38,
+            Height = 26,
+            Stretch = Stretch.Uniform,
+            Child = canvas,
+        };
+    }
+
+    private static string NormalizePaletteType(string type)
+    {
+        return type.StartsWith(IcPalettePrefix, StringComparison.Ordinal)
+            ? "IC"
+            : type;
+    }
+
+    private void RebuildCustomPalette()
+    {
+        CustomPalettePanel.Children.Clear();
+
+        foreach (NamedIcTemplate template in _namedIcTemplates.Values.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            string type = $"{IcPalettePrefix}{template.Name}";
+            CustomPalettePanel.Children.Add(CreatePaletteButton(type, template.Name));
+        }
+
+        if (CustomPalettePanel.Children.Count == 0)
+        {
+            CustomPalettePanel.Children.Add(new TextBlock
+            {
+                Text = "No custom components yet.",
+                Foreground = Brushes.DimGray,
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+    }
+
+    private void SyncNamedIcTemplatesFromProject()
+    {
+        _namedIcTemplates.Clear();
+
+        if (_project == null)
+        {
+            RebuildCustomPalette();
+            return;
+        }
+
+        foreach (NamedIcTemplate template in _project.NamedIcTemplates)
+        {
+            _namedIcTemplates[template.Name] = new NamedIcTemplate
+            {
+                Name = template.Name,
+                Template = template.Template,
+                Terminals = CloneTerminalLayouts(template.Terminals),
+            };
+        }
+
+        RebuildCustomPalette();
+    }
+
+    private static List<TerminalLayout> CloneTerminalLayouts(IReadOnlyList<TerminalLayout> terminals)
+    {
+        return terminals
+            .Select(t => new TerminalLayout
+            {
+                IsInput = t.IsInput,
+                PortIndex = t.PortIndex,
+                Side = t.Side,
+                SideOrdinal = t.SideOrdinal,
+                SideCount = t.SideCount,
+            })
+            .ToList();
+    }
+
+    private static string GetPaletteDisplayName(string type)
+    {
+        if (type.StartsWith(IcPalettePrefix, StringComparison.Ordinal))
+        {
+            return type.Substring(IcPalettePrefix.Length);
+        }
+
+        return type;
+    }
+
+    private bool TryResolveIcPaletteType(string type, out NamedIcTemplate template)
+    {
+        template = null;
+        if (!type.StartsWith(IcPalettePrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string name = type.Substring(IcPalettePrefix.Length);
+        return _namedIcTemplates.TryGetValue(name, out template);
+    }
+
+    private string GenerateAvailableNamedIcName(string baseName)
+    {
+        string candidate = baseName;
+        int seq = 1;
+        while (_namedIcTemplates.ContainsKey(candidate))
+        {
+            candidate = $"{baseName}-{seq}";
+            seq++;
+        }
+
+        return candidate;
+    }
+
+    private NamedIcTemplate BuildNamedIcTemplateFromActiveCircuit(string name)
+    {
+        if (_activeCircuit == null)
+        {
+            throw new InvalidOperationException("No active circuit to convert.");
+        }
+
+        Circuit source = _activeCircuit.Circuit;
+        if (source.Count == 0)
+        {
+            throw new InvalidOperationException("Current circuit is empty.");
+        }
+
+        Circuit cloned = source.Clone();
+
+        var sourceInputs = new List<UserInput>();
+        var sourceOutputs = new List<UserOutput>();
+        var clonedInputs = new List<UserInput>();
+        var clonedOutputs = new List<UserOutput>();
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            AbstractGate gate = source[i];
+            if (gate is UserInput input)
+            {
+                sourceInputs.Add(input);
+                clonedInputs.Add((UserInput)cloned[i]);
+            }
+            else if (gate is UserOutput output)
+            {
+                sourceOutputs.Add(output);
+                clonedOutputs.Add((UserOutput)cloned[i]);
+            }
+        }
+
+        if (sourceInputs.Count == 0 && sourceOutputs.Count == 0)
+        {
+            throw new InvalidOperationException("Custom components require at least one User Input or User Output.");
+        }
+
+        Dictionary<AbstractGate, GatePlacement> placementsByGate = _activeCircuit.Gates.ToDictionary(g => g.Gate);
+        List<IcTerminalSeed> seeds = ComputeIcTerminalSeeds(placementsByGate);
+        seeds.Sort((a, b) =>
+        {
+            int sideCmp = a.Side.CompareTo(b.Side);
+            return sideCmp != 0 ? sideCmp : a.Offset.CompareTo(b.Offset);
+        });
+
+        var descriptors = new List<(bool IsInput, int PortIndex, PortSide Side)>();
+        foreach (IcTerminalSeed seed in seeds)
+        {
+            if (seed.IsInput)
+            {
+                int index = sourceInputs.IndexOf((UserInput)seed.Gate);
+                if (index >= 0)
+                {
+                    descriptors.Add((true, index, seed.Side));
+                }
+            }
+            else
+            {
+                int index = sourceOutputs.IndexOf((UserOutput)seed.Gate);
+                if (index >= 0)
+                {
+                    descriptors.Add((false, index, seed.Side));
+                }
+            }
+        }
+
+        List<TerminalLayout> terminalLayouts = BuildTerminalLayouts(descriptors);
+
+        return new NamedIcTemplate
+        {
+            Name = name,
+            Template = new IC(cloned, clonedInputs.ToArray(), clonedOutputs.ToArray(), name),
+            Terminals = terminalLayouts,
+        };
+    }
+
+    private static List<IcTerminalSeed> ComputeIcTerminalSeeds(Dictionary<AbstractGate, GatePlacement> placementsByGate)
+    {
+        if (placementsByGate.Count == 0)
+        {
+            return new List<IcTerminalSeed>();
+        }
+
+        double minX = placementsByGate.Values.Min(p => p.X);
+        double maxX = placementsByGate.Values.Max(p => p.X);
+        double minY = placementsByGate.Values.Min(p => p.Y);
+        double maxY = placementsByGate.Values.Max(p => p.Y);
+
+        double avgX = (minX + maxX) / 2.0;
+        double avgY = (minY + maxY) / 2.0;
+
+        var seeds = new List<IcTerminalSeed>();
+
+        foreach ((AbstractGate gate, GatePlacement placement) in placementsByGate)
+        {
+            if (gate is not UserInput && gate is not UserOutput)
+            {
+                continue;
+            }
+
+            bool isInput = gate is UserInput;
+            double dx = placement.X - avgX;
+            double dy = placement.Y - avgY;
+
+            PortSide side;
+            double offset;
+
+            if (Math.Abs(dx) > Math.Abs(dy))
+            {
+                if (dx < 0)
+                {
+                    side = PortSide.Left;
+                    offset = -placement.Y;
+                }
+                else
+                {
+                    side = PortSide.Right;
+                    offset = placement.Y;
+                }
+            }
+            else
+            {
+                if (dy < 0)
+                {
+                    side = PortSide.Top;
+                    offset = placement.X;
+                }
+                else
+                {
+                    side = PortSide.Bottom;
+                    offset = placement.X;
+                }
+            }
+
+            seeds.Add(new IcTerminalSeed
+            {
+                Gate = gate,
+                IsInput = isInput,
+                Side = side,
+                Offset = offset,
+            });
+        }
+
+        return seeds;
+    }
+
+    private void ResetPaletteStatus()
+    {
+        PaletteStatusText.Text = PaletteIdleText;
+    }
+
+    private void PaletteButton_PointerPressed(object sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not string type)
+        {
+            return;
+        }
+
+        if (!e.GetCurrentPoint(button).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        _paletteDragButton = button;
+        _paletteDragType = type;
+        _paletteDragStart = e.GetPosition(button);
+        _palettePointerDown = true;
+        _suppressNextPaletteClick = false;
+    }
+
+    private async void PaletteButton_PointerMoved(object sender, PointerEventArgs e)
+    {
+        if (_paletteDragInProgress ||
+            !_palettePointerDown ||
+            sender is not Button button ||
+            button != _paletteDragButton ||
+            string.IsNullOrWhiteSpace(_paletteDragType))
+        {
+            return;
+        }
+
+        if (!e.GetCurrentPoint(button).Properties.IsLeftButtonPressed)
+        {
+            ResetPaletteDragState();
+            return;
+        }
+
+        Point now = e.GetPosition(button);
+        double dx = now.X - _paletteDragStart.X;
+        double dy = now.Y - _paletteDragStart.Y;
+        if (Math.Sqrt(dx * dx + dy * dy) < 6)
+        {
+            return;
+        }
+
+        _paletteDragInProgress = true;
+        _suppressNextPaletteClick = true;
+
+        try
+        {
+            DataObject data = new();
+            data.Set(PaletteGateTypeDataFormat, _paletteDragType);
+            await DragDrop.DoDragDrop(e, data, DragDropEffects.Copy);
+        }
+        finally
+        {
+            _paletteDragInProgress = false;
+            ResetPaletteDragState();
+        }
+
+        e.Handled = true;
+    }
+
+    private void PaletteButton_PointerReleased(object sender, PointerReleasedEventArgs e)
+    {
+        ResetPaletteDragState();
+    }
+
+    private void ResetPaletteDragState()
+    {
+        _palettePointerDown = false;
+        _paletteDragType = null;
+        _paletteDragButton = null;
+    }
+
     private void PaletteGate_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button || button.Tag is not string type)
@@ -248,8 +912,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_suppressNextPaletteClick)
+        {
+            _suppressNextPaletteClick = false;
+            return;
+        }
+
         _pendingAddGateType = type;
-        PaletteStatusText.Text = $"Palette: placing {type}. Click on canvas to add.";
+        PaletteStatusText.Text = $"Palette: placing {GetPaletteDisplayName(type)}. Click on canvas to add.";
         StatusText.Text = "Placement mode";
     }
 
@@ -350,7 +1020,7 @@ public partial class MainWindow : Window
         {
             CancelConnection();
             _pendingAddGateType = null;
-            PaletteStatusText.Text = "Palette: select a gate type, then click canvas to place.";
+            ResetPaletteStatus();
             return;
         }
 
@@ -400,6 +1070,49 @@ public partial class MainWindow : Window
         CancelConnection();
     }
 
+    private void CircuitCanvas_DragOver(object sender, DragEventArgs e)
+    {
+        if (_activeCircuit == null || !TryGetPaletteGateTypeFromData(e.Data, out _))
+        {
+            e.DragEffects = DragDropEffects.None;
+            return;
+        }
+
+        e.DragEffects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void CircuitCanvas_Drop(object sender, DragEventArgs e)
+    {
+        if (_activeCircuit == null || !TryGetPaletteGateTypeFromData(e.Data, out string type))
+        {
+            return;
+        }
+
+        Point dropPoint = e.GetPosition(CircuitCanvas);
+        UpdateLastCanvasPointer(dropPoint);
+        AddGateFromPalette(type, dropPoint);
+        e.Handled = true;
+    }
+
+    private static bool TryGetPaletteGateTypeFromData(IDataObject data, out string type)
+    {
+        type = string.Empty;
+
+        if (!data.Contains(PaletteGateTypeDataFormat))
+        {
+            return false;
+        }
+
+        if (data.Get(PaletteGateTypeDataFormat) is not string raw || string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        type = raw;
+        return true;
+    }
+
     private void LoadProject(string path)
     {
         try
@@ -408,6 +1121,9 @@ public partial class MainWindow : Window
 
             _project = LegacyCircuitLoader.LoadProject(path);
             _loadedPath = path;
+            _pendingAddGateType = null;
+            ResetPaletteStatus();
+            SyncNamedIcTemplatesFromProject();
 
             PathText.Text = path;
             ReloadButton.IsEnabled = true;
@@ -540,11 +1256,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Smooth trackpad magnify handling: avoid large frame-to-frame jumps.
-        double factor = Math.Exp(delta * 0.02);
-        factor = Math.Clamp(factor, 0.93, 1.08);
+        // Faster than before, but still clamped to avoid jumpy snap zoom.
+        double factor = Math.Exp(delta * 0.03);
+        factor = Math.Clamp(factor, 0.90, 1.12);
 
-        ZoomByFactor(factor, GetViewportCenterInCanvas());
+        Point anchor = GetZoomAnchorFallback();
+        try
+        {
+            anchor = e.GetPosition(CircuitCanvas);
+            UpdateLastCanvasPointer(anchor);
+        }
+        catch
+        {
+            // Gesture event may not always expose a local pointer position.
+        }
+
+        ZoomByFactor(factor, anchor);
         e.Handled = true;
     }
 
@@ -678,7 +1405,7 @@ public partial class MainWindow : Window
         };
 
         outer.PointerPressed += (_, e) => WireLine_PointerPressed(wire, e);
-        outer.PointerEntered += (_, _) => InfoLineText.Text = "Click wire to disconnect";
+        outer.PointerEntered += (_, _) => InfoLineText.Text = "Click or right-click wire to disconnect";
         outer.PointerExited += (_, _) => InfoLineText.Text = "Ready";
 
         _wireVisuals[wire] = new WireVisual
@@ -1159,6 +1886,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.GetCurrentPoint(visual).Properties.IsRightButtonPressed)
+        {
+            SelectGate(gate);
+            DeleteGate(gate);
+            e.Handled = true;
+            return;
+        }
+
         if (e.GetCurrentPoint(visual).Properties.IsLeftButtonPressed)
         {
             SelectGate(gate);
@@ -1260,7 +1995,8 @@ public partial class MainWindow : Window
 
     private void WireLine_PointerPressed(WirePlacement wire, PointerPressedEventArgs e)
     {
-        if (!e.GetCurrentPoint(CircuitCanvas).Properties.IsLeftButtonPressed)
+        PointerPointProperties props = e.GetCurrentPoint(CircuitCanvas).Properties;
+        if (!props.IsLeftButtonPressed && !props.IsRightButtonPressed)
         {
             return;
         }
@@ -1490,7 +2226,7 @@ public partial class MainWindow : Window
             RenderInputPanel(_activeCircuit);
             SelectGate(placement);
 
-            StatusText.Text = $"Added {type}";
+            StatusText.Text = $"Added {GetPaletteDisplayName(type)}";
             InfoLineText.Text = $"Added {placement.Name}";
         }
         catch (Exception ex)
@@ -1502,27 +2238,44 @@ public partial class MainWindow : Window
 
     private GatePlacement CreatePlacementFromType(string type, Point canvasPoint)
     {
-        AbstractGate gate = type switch
-        {
-            "And" => new Gates.BasicGates.And(),
-            "Not" => new Gates.BasicGates.Not(),
-            "Or" => new Gates.BasicGates.Or(),
-            "Nand" => new Gates.BasicGates.Nand(),
-            "Nor" => new Gates.BasicGates.Nor(),
-            "Xor" => new Gates.BasicGates.Xor(),
-            "Xnor" => new Gates.BasicGates.Xnor(),
-            "Buffer" => new Gates.BasicGates.Buffer(),
-            "UserInput" => new UserInput(),
-            "UserOutput" => new UserOutput(),
-            "NumericInput" => new NumericInput(2),
-            "NumericOutput" => new NumericOutput(2),
-            "Clock" => new Clock(0),
-            "Comment" => new Comment(),
-            _ => throw new InvalidOperationException($"Unsupported palette gate '{type}'."),
-        };
+        AbstractGate gate;
+        string placementType;
+        string placementName;
+        List<TerminalLayout> terminals;
 
-        List<TerminalLayout> terminals = BuildGateTerminalLayouts(type, gate);
-        (double width, double height) = EstimateGateSize(type, gate.Name, null, terminals);
+        if (TryResolveIcPaletteType(type, out NamedIcTemplate template))
+        {
+            placementType = "IC";
+            gate = template.Template.Clone();
+            placementName = template.Name;
+            terminals = CloneTerminalLayouts(template.Terminals);
+        }
+        else
+        {
+            placementType = type;
+            gate = type switch
+            {
+                "And" => new Gates.BasicGates.And(),
+                "Not" => new Gates.BasicGates.Not(),
+                "Or" => new Gates.BasicGates.Or(),
+                "Nand" => new Gates.BasicGates.Nand(),
+                "Nor" => new Gates.BasicGates.Nor(),
+                "Xor" => new Gates.BasicGates.Xor(),
+                "Xnor" => new Gates.BasicGates.Xnor(),
+                "Buffer" => new Gates.BasicGates.Buffer(),
+                "UserInput" => new UserInput(),
+                "UserOutput" => new UserOutput(),
+                "NumericInput" => new NumericInput(2),
+                "NumericOutput" => new NumericOutput(2),
+                "Clock" => new Clock(0),
+                "Comment" => new Comment(),
+                _ => throw new InvalidOperationException($"Unsupported palette gate '{type}'."),
+            };
+            placementName = gate.Name;
+            terminals = BuildGateTerminalLayouts(placementType, gate);
+        }
+
+        (double width, double height) = EstimateGateSize(placementType, placementName, null, terminals);
 
         double left = canvasPoint.X - width / 2;
         double top = canvasPoint.Y - height / 2;
@@ -1535,7 +2288,7 @@ public partial class MainWindow : Window
         GatePlacement placement = new()
         {
             Id = nextId,
-            Type = type,
+            Type = placementType,
             Name = GenerateGateName(gate.Name),
             Gate = gate,
             X = left - _offsetX,

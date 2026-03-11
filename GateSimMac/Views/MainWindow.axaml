@@ -28,6 +28,10 @@
           <Button Name="DeleteButton" Click="DeleteButton_Click" ToolTip.Tip="Delete Selected Gate">
             <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/DeleteHS.png" />
           </Button>
+          <Button Name="CreateComponentButton"
+                  Click="CreateComponentButton_Click"
+                  ToolTip.Tip="Create Custom Component from Current Circuit"
+                  Content="Create Component" />
           <ToggleButton Name="ShowTfToggle" IsChecked="True" Checked="ShowTfToggle_Changed" Unchecked="ShowTfToggle_Changed" ToolTip.Tip="Show True/False Coloring">
             <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/wire_color.png" />
           </ToggleButton>
@@ -79,32 +83,19 @@
             <TextBlock Text="Gate Selector" FontWeight="SemiBold" />
 
             <Expander Header="Basic Gates" IsExpanded="True">
-              <StackPanel Margin="4" Spacing="4">
-                <Button Tag="Not" Click="PaletteGate_Click">NOT</Button>
-                <Button Tag="And" Click="PaletteGate_Click">AND</Button>
-                <Button Tag="Or" Click="PaletteGate_Click">OR</Button>
-                <Button Tag="Buffer" Click="PaletteGate_Click">BUFFER</Button>
-              </StackPanel>
+              <StackPanel Name="BasicPalettePanel" Margin="4" Spacing="4" />
             </Expander>
 
             <Expander Header="Compound Gates" IsExpanded="False">
-              <StackPanel Margin="4" Spacing="4">
-                <Button Tag="Nand" Click="PaletteGate_Click">NAND</Button>
-                <Button Tag="Nor" Click="PaletteGate_Click">NOR</Button>
-                <Button Tag="Xor" Click="PaletteGate_Click">XOR</Button>
-                <Button Tag="Xnor" Click="PaletteGate_Click">XNOR</Button>
-              </StackPanel>
+              <StackPanel Name="CompoundPalettePanel" Margin="4" Spacing="4" />
             </Expander>
 
             <Expander Header="I/O Gates" IsExpanded="True">
-              <StackPanel Margin="4" Spacing="4">
-                <Button Tag="UserInput" Click="PaletteGate_Click">User Input</Button>
-                <Button Tag="UserOutput" Click="PaletteGate_Click">User Output</Button>
-                <Button Tag="NumericInput" Click="PaletteGate_Click">Numeric Input</Button>
-                <Button Tag="NumericOutput" Click="PaletteGate_Click">Numeric Output</Button>
-                <Button Tag="Clock" Click="PaletteGate_Click">Clock</Button>
-                <Button Tag="Comment" Click="PaletteGate_Click">Comment</Button>
-              </StackPanel>
+              <StackPanel Name="IoPalettePanel" Margin="4" Spacing="4" />
+            </Expander>
+
+            <Expander Header="Custom Components" IsExpanded="True">
+              <StackPanel Name="CustomPalettePanel" Margin="4" Spacing="4" />
             </Expander>
 
             <Border Margin="0,8,0,0" BorderBrush="#FFD8D8D8" BorderThickness="1" Padding="6" Background="White">
