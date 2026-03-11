@@ -56,6 +56,9 @@ public partial class MainWindow : Window
     private double _offsetX = 80;
     private double _offsetY = 80;
     private double _zoom = 1.0;
+    private bool _isUpdatingZoomSlider;
+    private Point _lastCanvasPointer;
+    private bool _hasLastCanvasPointer;
 
     private bool _isSwitchingCircuit;
     private bool _showTrueFalse = true;
@@ -75,6 +78,7 @@ public partial class MainWindow : Window
 
     private sealed class TerminalVisual
     {
+        public required Canvas StemRoot { get; init; }
         public required Canvas Root { get; init; }
         public required Ellipse Dot { get; init; }
         public required Polygon Arrow { get; init; }
@@ -83,7 +87,7 @@ public partial class MainWindow : Window
     private static readonly Dictionary<string, string> GatePath = new(StringComparer.Ordinal)
     {
         ["And"] = "M 17,17 v 30 h 15 a 2,2 1 0 0 0,-30 h -15",
-        ["Not"] = "M 15,17 v 30 l 30,-15 l -30,-15 M 46,33.5 a 3,3 1 1 1 0.1,0.1",
+        ["Not"] = "M 15,17 L 15,47 L 45,32 Z M 46,33.5 a 3,3 1 1 1 0.1,0.1",
         ["Or"] = "M 15,17 h 10 c 10,0 20,5 25,15 c -5,10 -15,15 -25,15 h -10 c 5,-10 5,-20 0,-30",
         ["Nor"] = "M 15,17 h 5 c 10,0 20,5 25,15 c -5,10 -15,15 -25,15 h -5 c 5,-10 5,-20 0,-30 M 46,33.5 a 3,3 1 1 1 0.1,0.1",
         ["Nand"] = "M 15,17 v 30 h 15 a 2,2 1 0 0 0,-30 h -15 M 46,33.5 a 3,3 1 1 1 0.1,0.1",
@@ -123,6 +127,9 @@ public partial class MainWindow : Window
         PropagationThread.SLEEP_TIME = (int)SpeedSlider.Value;
         _useCurvedWires = CurvyWiresToggle.IsChecked ?? true;
         _snapToGrid = SnapGridToggle.IsChecked ?? false;
+        _lastCanvasPointer = new Point(CircuitCanvas.Width / 2.0, CircuitCanvas.Height / 2.0);
+
+        Gestures.AddPointerTouchPadGestureMagnifyHandler(CircuitCanvas, CircuitCanvas_PointerTouchPadGestureMagnify);
 
         if (args.Length > 0 && File.Exists(args[0]))
         {
@@ -264,8 +271,12 @@ public partial class MainWindow : Window
 
     private void ZoomSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
-        _zoom = e.NewValue;
-        ApplyZoom();
+        if (_isUpdatingZoomSlider)
+        {
+            return;
+        }
+
+        SetZoom(e.NewValue, null, syncZoomSlider: false);
     }
 
     private void SpeedSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
@@ -333,6 +344,7 @@ public partial class MainWindow : Window
         }
 
         Point p = e.GetPosition(CircuitCanvas);
+        UpdateLastCanvasPointer(p);
 
         if (e.GetCurrentPoint(CircuitCanvas).Properties.IsRightButtonPressed)
         {
@@ -357,23 +369,27 @@ public partial class MainWindow : Window
 
     private void CircuitCanvas_PointerMoved(object sender, PointerEventArgs e)
     {
+        Point cursor = e.GetPosition(CircuitCanvas);
+        UpdateLastCanvasPointer(cursor);
+
         if (!_isConnecting || _connectionPreview == null)
         {
             return;
         }
 
-        Point cursor = e.GetPosition(CircuitCanvas);
         UpdateConnectionPreview(cursor);
     }
 
     private void CircuitCanvas_PointerReleased(object sender, PointerReleasedEventArgs e)
     {
+        Point cursor = e.GetPosition(CircuitCanvas);
+        UpdateLastCanvasPointer(cursor);
+
         if (!_isConnecting)
         {
             return;
         }
 
-        Point cursor = e.GetPosition(CircuitCanvas);
         (GatePlacement Gate, int Port)? target = FindNearestInputTerminal(cursor, 18);
 
         if (target.HasValue)
@@ -438,6 +454,100 @@ public partial class MainWindow : Window
         CircuitCanvas.RenderTransform = new ScaleTransform(_zoom, _zoom);
     }
 
+    private void SetZoom(double newZoom, Point? anchorCanvasPoint, bool syncZoomSlider)
+    {
+        double clampedZoom = Math.Clamp(newZoom, ZoomSlider.Minimum, ZoomSlider.Maximum);
+        if (Math.Abs(clampedZoom - _zoom) < 0.0001)
+        {
+            return;
+        }
+
+        Point anchor = anchorCanvasPoint ?? GetViewportCenterInCanvas();
+        _zoom = clampedZoom;
+        ApplyZoom();
+
+        if (CanvasScroll.Viewport.Width > 1 && CanvasScroll.Viewport.Height > 1)
+        {
+            Vector desiredOffset = new(
+                (anchor.X * _zoom) - (CanvasScroll.Viewport.Width / 2.0),
+                (anchor.Y * _zoom) - (CanvasScroll.Viewport.Height / 2.0));
+
+            CanvasScroll.Offset = ClampCanvasOffset(desiredOffset);
+        }
+
+        if (syncZoomSlider && Math.Abs(ZoomSlider.Value - _zoom) > 0.0001)
+        {
+            _isUpdatingZoomSlider = true;
+            ZoomSlider.Value = _zoom;
+            _isUpdatingZoomSlider = false;
+        }
+    }
+
+    private void ZoomByFactor(double factor, Point anchorCanvasPoint)
+    {
+        if (double.IsNaN(factor) || double.IsInfinity(factor) || factor <= 0)
+        {
+            return;
+        }
+
+        SetZoom(_zoom * factor, anchorCanvasPoint, syncZoomSlider: true);
+    }
+
+    private Vector ClampCanvasOffset(Vector desiredOffset)
+    {
+        double maxX = Math.Max(0, (CircuitCanvas.Width * _zoom) - CanvasScroll.Viewport.Width);
+        double maxY = Math.Max(0, (CircuitCanvas.Height * _zoom) - CanvasScroll.Viewport.Height);
+
+        return new Vector(
+            Math.Clamp(desiredOffset.X, 0, maxX),
+            Math.Clamp(desiredOffset.Y, 0, maxY));
+    }
+
+    private Point GetViewportCenterInCanvas()
+    {
+        if (CanvasScroll.Viewport.Width <= 1 || CanvasScroll.Viewport.Height <= 1)
+        {
+            return GetZoomAnchorFallback();
+        }
+
+        double z = Math.Max(0.0001, _zoom);
+        return new Point(
+            (CanvasScroll.Offset.X + (CanvasScroll.Viewport.Width / 2.0)) / z,
+            (CanvasScroll.Offset.Y + (CanvasScroll.Viewport.Height / 2.0)) / z);
+    }
+
+    private void UpdateLastCanvasPointer(Point canvasPoint)
+    {
+        _lastCanvasPointer = canvasPoint;
+        _hasLastCanvasPointer = true;
+    }
+
+    private Point GetZoomAnchorFallback()
+    {
+        if (_hasLastCanvasPointer)
+        {
+            return _lastCanvasPointer;
+        }
+
+        return new Point(CircuitCanvas.Width / 2.0, CircuitCanvas.Height / 2.0);
+    }
+
+    private void CircuitCanvas_PointerTouchPadGestureMagnify(object sender, PointerDeltaEventArgs e)
+    {
+        double delta = Math.Abs(e.Delta.Y) >= Math.Abs(e.Delta.X) ? e.Delta.Y : e.Delta.X;
+        if (Math.Abs(delta) < 0.0001)
+        {
+            return;
+        }
+
+        // Smooth trackpad magnify handling: avoid large frame-to-frame jumps.
+        double factor = Math.Exp(delta * 0.02);
+        factor = Math.Clamp(factor, 0.93, 1.08);
+
+        ZoomByFactor(factor, GetViewportCenterInCanvas());
+        e.Handled = true;
+    }
+
     private void RenderCircuit(LoadedCircuit circuit)
     {
         CancelConnection();
@@ -487,6 +597,7 @@ public partial class MainWindow : Window
             {
                 TerminalVisual visual = CreateTerminalVisual(gate, terminal);
                 _terminalVisuals[(gate, terminal.IsInput, terminal.PortIndex)] = visual;
+                CircuitCanvas.Children.Add(visual.StemRoot);
                 CircuitCanvas.Children.Add(visual.Root);
             }
         }
@@ -582,12 +693,13 @@ public partial class MainWindow : Window
 
     private TerminalVisual CreateTerminalVisual(GatePlacement gate, TerminalLayout terminal)
     {
-        Canvas root = new()
+        Canvas stemRoot = new()
         {
             Width = 10,
             Height = 22,
             Background = Brushes.Transparent,
-            ZIndex = 4,
+            ZIndex = 2,
+            IsHitTestVisible = false,
         };
 
         Line stem = new()
@@ -597,6 +709,15 @@ public partial class MainWindow : Window
             Stroke = Brushes.Black,
             StrokeThickness = 2,
             IsHitTestVisible = false,
+        };
+        stemRoot.Children.Add(stem);
+
+        Canvas root = new()
+        {
+            Width = 10,
+            Height = 22,
+            Background = Brushes.Transparent,
+            ZIndex = 4,
         };
 
         Ellipse dot = new()
@@ -621,7 +742,6 @@ public partial class MainWindow : Window
             IsHitTestVisible = false,
         };
 
-        root.Children.Add(stem);
         root.Children.Add(dot);
         root.Children.Add(arrow);
         root.PointerPressed += (_, e) => TerminalDot_PointerPressed(gate, terminal, e);
@@ -640,6 +760,7 @@ public partial class MainWindow : Window
 
         return new TerminalVisual
         {
+            StemRoot = stemRoot,
             Root = root,
             Dot = dot,
             Arrow = arrow,
@@ -1333,6 +1454,7 @@ public partial class MainWindow : Window
 
         foreach (((GatePlacement g, bool input, int port), TerminalVisual visual) in _terminalVisuals.Where(kv => kv.Key.Gate == gate).ToList())
         {
+            CircuitCanvas.Children.Remove(visual.StemRoot);
             CircuitCanvas.Children.Remove(visual.Root);
             _terminalVisuals.Remove((g, input, port));
         }
@@ -1694,21 +1816,7 @@ public partial class MainWindow : Window
 
         foreach ((GatePlacement gate, Border root) in _gateRoots)
         {
-            bool active = _showTrueFalse && gate.Gate.Output.Any(v => v);
-            if (_showTrueFalse && gate.Gate is UserInput ui)
-            {
-                active = ui.Value;
-            }
-            else if (_showTrueFalse && gate.Gate is UserOutput uo)
-            {
-                active = uo.Value;
-            }
-            else if (_showTrueFalse && gate.Gate is NumericOutput no)
-            {
-                active = no.IntValue != 0;
-            }
-
-            root.Background = active ? new SolidColorBrush(Color.Parse("#11FF0000")) : Brushes.Transparent;
+            root.Background = Brushes.Transparent;
             root.Opacity = !_endUserMode || IsUserFacing(gate.Gate) ? 1.0 : 0.2;
 
             if (_gateStates.TryGetValue(gate, out TextBlock state))
@@ -1752,6 +1860,7 @@ public partial class MainWindow : Window
                               _connectHoverTarget.Value.Port == port
                 ? Brushes.LightGreen
                 : Brushes.White;
+            visual.StemRoot.Opacity = !_endUserMode || IsUserFacing(gate.Gate) ? 1.0 : 0.2;
             visual.Root.Opacity = !_endUserMode || IsUserFacing(gate.Gate) ? 1.0 : 0.2;
         }
 
@@ -1836,10 +1945,14 @@ public partial class MainWindow : Window
     private void UpdateTerminalVisualPosition(GatePlacement gate, bool isInput, int port, TerminalVisual visual)
     {
         Point p = GetTerminalPoint(gate, isInput, port);
+        Canvas.SetLeft(visual.StemRoot, p.X - 5);
+        Canvas.SetTop(visual.StemRoot, p.Y - 5);
         Canvas.SetLeft(visual.Root, p.X - 5);
         Canvas.SetTop(visual.Root, p.Y - 5);
 
         TerminalLayout terminal = gate.GetTerminal(isInput, port);
+        visual.StemRoot.RenderTransformOrigin = new RelativePoint(0.5, 5.0 / 22.0, RelativeUnit.Relative);
+        visual.StemRoot.RenderTransform = new RotateTransform(PortSideToAngle(terminal.Side) + gate.Angle);
         visual.Root.RenderTransformOrigin = new RelativePoint(0.5, 5.0 / 22.0, RelativeUnit.Relative);
         visual.Root.RenderTransform = new RotateTransform(PortSideToAngle(terminal.Side) + gate.Angle);
     }
