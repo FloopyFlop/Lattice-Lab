@@ -1,0 +1,179 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="GateSimMac.Views.MainWindow"
+        Width="1560"
+        Height="960"
+        MinWidth="1200"
+        MinHeight="760"
+        Title="Logic Gate Simulator - Mac Compatibility">
+  <Grid RowDefinitions="Auto,*,Auto">
+    <Border Grid.Row="0" BorderBrush="#FFC8C8C8" BorderThickness="0,0,0,1" Background="#FFF2F2F2" Padding="8,6">
+      <Grid ColumnDefinitions="Auto,16,*,16,280">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button Name="NewButton" Click="NewButton_Click" ToolTip.Tip="New Circuit">
+            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/NewDocumentHS.png" />
+          </Button>
+          <Button Name="OpenButton" Click="OpenButton_Click" ToolTip.Tip="Open .gcg/.gcf/.ic">
+            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/openHS.png" />
+          </Button>
+          <Button Name="ReloadButton" Click="ReloadButton_Click" ToolTip.Tip="Reload Current File" IsEnabled="False">
+            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/RefreshDocViewHS.png" />
+          </Button>
+
+          <Border Width="1" Height="20" Background="#FFD0D0D0" Margin="6,0" />
+
+          <Button Name="DeleteButton" Click="DeleteButton_Click" ToolTip.Tip="Delete Selected Gate">
+            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/DeleteHS.png" />
+          </Button>
+          <ToggleButton Name="ShowTfToggle" IsChecked="True" Checked="ShowTfToggle_Changed" Unchecked="ShowTfToggle_Changed" ToolTip.Tip="Show True/False Coloring">
+            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/wire_color.png" />
+          </ToggleButton>
+          <ToggleButton Name="EndUserToggle" Checked="EndUserToggle_Changed" Unchecked="EndUserToggle_Changed" ToolTip.Tip="End-User Mode">
+            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/ProtectFormHS.png" />
+          </ToggleButton>
+          <ToggleButton Name="CurvyWiresToggle"
+                        IsChecked="True"
+                        Checked="CurvyWiresToggle_Changed"
+                        Unchecked="CurvyWiresToggle_Changed"
+                        ToolTip.Tip="Curved Wires"
+                        Content="Curves" />
+          <ToggleButton Name="SnapGridToggle"
+                        Checked="SnapGridToggle_Changed"
+                        Unchecked="SnapGridToggle_Changed"
+                        ToolTip.Tip="Snap Dragging to 32px Grid"
+                        Content="Snap" />
+        </StackPanel>
+
+        <Grid Grid.Column="2" ColumnDefinitions="Auto,8,280,16,*,16,*">
+          <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Circuit:" FontWeight="SemiBold" />
+          <ComboBox Grid.Column="2"
+                    Name="CircuitPicker"
+                    SelectionChanged="CircuitPicker_SelectionChanged" />
+
+          <TextBlock Grid.Column="4"
+                     Name="PathText"
+                     VerticalAlignment="Center"
+                     Text="No file loaded"
+                     TextTrimming="CharacterEllipsis" />
+
+          <TextBlock Grid.Column="6"
+                     Name="StatusText"
+                     VerticalAlignment="Center"
+                     TextAlignment="Right"
+                     Text="Idle" />
+        </Grid>
+
+        <Border Grid.Column="4" BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8,4" Background="White">
+          <TextBlock Text="Classic Layout Mode" FontSize="11" FontWeight="SemiBold" />
+        </Border>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="230,*,310">
+      <Border Grid.Column="0" BorderBrush="#FFD0D0D0" BorderThickness="0,0,1,0" Background="#FFF8F8F8">
+        <ScrollViewer>
+          <StackPanel Margin="8" Spacing="6">
+            <TextBlock Text="Gate Selector" FontWeight="SemiBold" />
+
+            <Expander Header="Basic Gates" IsExpanded="True">
+              <StackPanel Margin="4" Spacing="4">
+                <Button Tag="Not" Click="PaletteGate_Click">NOT</Button>
+                <Button Tag="And" Click="PaletteGate_Click">AND</Button>
+                <Button Tag="Or" Click="PaletteGate_Click">OR</Button>
+                <Button Tag="Buffer" Click="PaletteGate_Click">BUFFER</Button>
+              </StackPanel>
+            </Expander>
+
+            <Expander Header="Compound Gates" IsExpanded="False">
+              <StackPanel Margin="4" Spacing="4">
+                <Button Tag="Nand" Click="PaletteGate_Click">NAND</Button>
+                <Button Tag="Nor" Click="PaletteGate_Click">NOR</Button>
+                <Button Tag="Xor" Click="PaletteGate_Click">XOR</Button>
+                <Button Tag="Xnor" Click="PaletteGate_Click">XNOR</Button>
+              </StackPanel>
+            </Expander>
+
+            <Expander Header="I/O Gates" IsExpanded="True">
+              <StackPanel Margin="4" Spacing="4">
+                <Button Tag="UserInput" Click="PaletteGate_Click">User Input</Button>
+                <Button Tag="UserOutput" Click="PaletteGate_Click">User Output</Button>
+                <Button Tag="NumericInput" Click="PaletteGate_Click">Numeric Input</Button>
+                <Button Tag="NumericOutput" Click="PaletteGate_Click">Numeric Output</Button>
+                <Button Tag="Clock" Click="PaletteGate_Click">Clock</Button>
+                <Button Tag="Comment" Click="PaletteGate_Click">Comment</Button>
+              </StackPanel>
+            </Expander>
+
+            <Border Margin="0,8,0,0" BorderBrush="#FFD8D8D8" BorderThickness="1" Padding="6" Background="White">
+              <TextBlock Name="PaletteStatusText" Text="Palette: select a gate type, then click canvas to place." TextWrapping="Wrap" FontSize="11" />
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <Grid Grid.Column="1">
+        <ScrollViewer Name="CanvasScroll"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto">
+          <Canvas Name="CircuitCanvas"
+                  Background="#FFF6F6F6"
+                  Width="1600"
+                  Height="900"
+                  PointerPressed="CircuitCanvas_PointerPressed"
+                  PointerMoved="CircuitCanvas_PointerMoved"
+                  PointerReleased="CircuitCanvas_PointerReleased" />
+        </ScrollViewer>
+
+        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12" BorderBrush="#FFBBBBBB" BorderThickness="1" CornerRadius="6" Padding="10" Background="#EEFFFFFF">
+          <StackPanel Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/ZoomHS.png" />
+              <Slider Name="ZoomSlider" Width="120" Minimum="0.25" Maximum="3.0" Value="1.0" SmallChange="0.05" LargeChange="0.25" ValueChanged="ZoomSlider_ValueChanged" />
+              <Button Click="ActualSizeButton_Click" ToolTip.Tip="Actual Size">
+                <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/ActualSizeHS.png" />
+              </Button>
+              <Button Click="FitButton_Click" ToolTip.Tip="Fit Circuit">
+                <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/PageWidthHS.png" />
+              </Button>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/turtle.png" />
+              <Slider Name="SpeedSlider" Width="120" Minimum="1" Maximum="400" Value="1" SmallChange="5" LargeChange="20" IsDirectionReversed="True" ValueChanged="SpeedSlider_ValueChanged" />
+              <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/hare.png" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Border Grid.Column="2" BorderBrush="#FFD0D0D0" BorderThickness="1,0,0,0" Padding="12" Background="#FFFCFCFC">
+        <StackPanel Spacing="8">
+          <TextBlock FontWeight="SemiBold" Text="Inputs" />
+          <StackPanel Name="InputsPanel" Spacing="6" />
+
+          <Separator Margin="0,8,0,8" />
+
+          <TextBlock FontWeight="SemiBold" Text="Output Snapshot" />
+          <TextBlock Name="OutputText" TextWrapping="Wrap" FontFamily="Consolas, Menlo, monospace" />
+
+          <Separator Margin="0,8,0,8" />
+
+          <TextBlock FontWeight="SemiBold" Text="Notes" />
+          <TextBlock Name="InfoText" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Border Grid.Row="2" BorderBrush="#FFC8C8C8" BorderThickness="0,1,0,0" Background="#FFEEEEEE" Padding="8,4">
+      <Grid ColumnDefinitions="Auto,16,Auto,16,Auto,*,*">
+        <TextBlock Grid.Column="0" Text="Logic Gate Simulator" FontWeight="SemiBold" />
+        <TextBlock Grid.Column="2" Text="v1.4 compatibility" />
+        <TextBlock Grid.Column="4" Text="kolls.net/gatesim" />
+        <TextBlock Grid.Column="6" Name="InfoLineText" Text="Ready" TextTrimming="CharacterEllipsis" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>
