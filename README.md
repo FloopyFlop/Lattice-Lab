@@ -88,6 +88,55 @@ If you need save/export today, use the legacy `GatesWpf` application workflow.
 
 This project aims to keep the original logic behavior and file compatibility while modernizing runtime/UI support.
 
+## Dependency Install (Per OS)
+
+Use this as a quick baseline setup before running the app.
+
+### Rendering/UI Dependencies (Important)
+
+- The app uses **Avalonia** for UI/rendering.
+- Avalonia packages are already declared in `GateSimMac/GateSimMac.csproj` and are restored automatically by `dotnet restore/build`.
+- You do **not** install Avalonia manually as a separate system package.
+
+```bash
+dotnet restore GateSimMac/GateSimMac.csproj
+```
+
+### macOS
+
+```bash
+xcode-select --install
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install --cask dotnet-sdk
+brew install git
+```
+
+### Ubuntu / Debian
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl git build-essential clang pkg-config \
+  libfontconfig1 libfreetype6 \
+  libx11-6 libxext6 libxrender1 libxi6 libxrandr2 libxinerama1 libxcursor1 \
+  libgl1 libegl1 libdbus-1-3
+# then install .NET SDK 10+ from Microsoft package feed/docs
+```
+
+These Linux packages provide the native windowing/font/graphics pieces Avalonia needs at runtime.
+
+### Windows (PowerShell, Admin)
+
+```powershell
+winget install --id Git.Git --exact
+winget install --id Microsoft.DotNet.SDK.10 --exact
+```
+
+### Verify
+
+```bash
+dotnet --info
+```
+
 ## License
 
 The original source headers state GNU GPL licensing terms (GPL v3 or later). Keep the original notices and license terms intact when redistributing or modifying.
