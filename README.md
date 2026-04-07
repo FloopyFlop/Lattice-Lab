@@ -84,10 +84,6 @@ If you need save/export today, use the legacy `GatesWpf` application workflow.
 4. Wire outputs to inputs, then run live by toggling inputs/clocks.
 5. Use the right panel for input controls and output snapshot.
 
-## Notes on Intent
-
-This project aims to keep the original logic behavior and file compatibility while modernizing runtime/UI support.
-
 ## Dependency Install (Per OS)
 
 Use this as a quick baseline setup before running the app.
