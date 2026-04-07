@@ -8,9 +8,95 @@
         Height="960"
         MinWidth="1200"
         MinHeight="760"
-        Title="Logic Gate Simulator - Mac Compatibility">
-  <Grid RowDefinitions="Auto,*,Auto">
-    <Border Grid.Row="0" BorderBrush="#FFC8C8C8" BorderThickness="0,0,0,1" Background="#FFF2F2F2" Padding="8,6">
+        Title="Logic Gate Simulator (Classic Compatibility)"
+        FontFamily="Tahoma, Segoe UI, Arial, sans-serif"
+        Background="#FFECE9D8">
+  <Window.Styles>
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="6,2" />
+    </Style>
+    <Style Selector="ToggleButton">
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="6,2" />
+    </Style>
+    <Style Selector="Expander">
+      <Setter Property="Margin" Value="0,2,0,2" />
+    </Style>
+  </Window.Styles>
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Menu Grid.Row="0" Background="#FFE2DFD2">
+      <MenuItem Header="_File">
+        <MenuItem Header="_New Circuit" Click="MenuNew_Click" />
+        <MenuItem Header="_Open..." Click="MenuOpen_Click" />
+        <MenuItem Header="_Reload" Click="MenuReload_Click" />
+        <Separator />
+        <MenuItem Header="Create _Component" Click="MenuCreateComponent_Click" />
+      </MenuItem>
+      <MenuItem Header="_Edit">
+        <MenuItem Header="_Copy Selected Gate" Click="MenuCopyGate_Click" />
+        <MenuItem Header="_Paste Gate" Click="MenuPasteGate_Click" />
+        <Separator />
+        <MenuItem Header="_Inline Selected Component" Click="MenuInlineSelected_Click" />
+        <MenuItem Header="Inline _All Components" Click="MenuInlineAll_Click" />
+        <Separator />
+        <MenuItem Header="_Delete Selected Gate" Click="MenuDeleteSelected_Click" />
+      </MenuItem>
+      <MenuItem Header="_View">
+        <MenuItem Name="ShowSidebarMenuItem"
+                  Header="Show _Sidebar"
+                  ToggleType="CheckBox"
+                  IsChecked="False"
+                  Click="ShowSidebarMenuItem_Changed" />
+        <MenuItem Name="ShowOutputMenuItem"
+                  Header="Show _Output Snapshot"
+                  ToggleType="CheckBox"
+                  IsChecked="True"
+                  Click="ShowOutputMenuItem_Changed" />
+        <MenuItem Name="ShowGridMenuItem"
+                  Header="Show _Canvas Grid"
+                  ToggleType="CheckBox"
+                  IsChecked="True"
+                  Click="ShowGridMenuItem_Changed" />
+        <Separator />
+        <MenuItem Header="_Actual Size" Click="MenuActualSize_Click" />
+        <MenuItem Header="_Fit Circuit" Click="MenuFitCircuit_Click" />
+      </MenuItem>
+      <MenuItem Header="_Settings">
+        <MenuItem Name="ShowTrueFalseMenuItem"
+                  Header="Show _True/False Colors"
+                  ToggleType="CheckBox"
+                  IsChecked="True"
+                  Click="ShowTrueFalseMenuItem_Changed" />
+        <MenuItem Name="CurvyWiresMenuItem"
+                  Header="_Curved Wires"
+                  ToggleType="CheckBox"
+                  IsChecked="True"
+                  Click="CurvyWiresMenuItem_Changed" />
+        <MenuItem Name="SnapToGridMenuItem"
+                  Header="_Snap To Grid"
+                  ToggleType="CheckBox"
+                  IsChecked="False"
+                  Click="SnapToGridMenuItem_Changed" />
+        <MenuItem Name="EndUserModeMenuItem"
+                  Header="_End-User Mode"
+                  ToggleType="CheckBox"
+                  IsChecked="False"
+                  Click="EndUserModeMenuItem_Changed" />
+        <MenuItem Name="InvertWheelZoomMenuItem"
+                  Header="_Invert Ctrl+Wheel Zoom"
+                  ToggleType="CheckBox"
+                  IsChecked="False"
+                  Click="InvertWheelZoomMenuItem_Changed" />
+        <Separator />
+        <MenuItem Header="Zoom Step +" Click="MenuZoomStepIncrease_Click" />
+        <MenuItem Header="Zoom Step -" Click="MenuZoomStepDecrease_Click" />
+        <MenuItem Header="Pan Step +" Click="MenuPanStepIncrease_Click" />
+        <MenuItem Header="Pan Step -" Click="MenuPanStepDecrease_Click" />
+      </MenuItem>
+    </Menu>
+
+    <Border Grid.Row="1" BorderBrush="#FF9A9A9A" BorderThickness="0,0,0,1" Background="#FFECE9D8" Padding="8,6">
       <Grid ColumnDefinitions="Auto,16,*,16,280">
         <StackPanel Orientation="Horizontal" Spacing="4">
           <Button Name="NewButton" Click="NewButton_Click" ToolTip.Tip="New Circuit">
@@ -70,14 +156,14 @@
                      Text="Idle" />
         </Grid>
 
-        <Border Grid.Column="4" BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8,4" Background="White">
-          <TextBlock Text="Classic Layout Mode" FontSize="11" FontWeight="SemiBold" />
+        <Border Grid.Column="4" BorderBrush="#FFA8A8A8" BorderThickness="1" CornerRadius="0" Padding="8,4" Background="#FFF7F4EB">
+          <TextBlock Text="Classic Layout Mode (Retro)" FontSize="11" FontWeight="SemiBold" />
         </Border>
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="230,*,310">
-      <Border Grid.Column="0" BorderBrush="#FFD0D0D0" BorderThickness="0,0,1,0" Background="#FFF8F8F8">
+    <Grid Grid.Row="2" Name="MainContentGrid" ColumnDefinitions="230,*,310">
+      <Border Grid.Column="0" BorderBrush="#FFB7B7B7" BorderThickness="0,0,1,0" Background="#FFF4F1E8">
         <ScrollViewer>
           <StackPanel Margin="8" Spacing="6">
             <TextBlock Text="Gate Selector" FontWeight="SemiBold" />
@@ -98,8 +184,8 @@
               <StackPanel Name="CustomPalettePanel" Margin="4" Spacing="4" />
             </Expander>
 
-            <Border Margin="0,8,0,0" BorderBrush="#FFD8D8D8" BorderThickness="1" Padding="6" Background="White">
-              <TextBlock Name="PaletteStatusText" Text="Palette: select a gate type, then click canvas to place." TextWrapping="Wrap" FontSize="11" />
+            <Border Margin="0,8,0,0" BorderBrush="#FFB7B7B7" BorderThickness="1" Padding="6" Background="#FFFAF7EF">
+              <TextBlock Name="PaletteStatusText" Text="Palette: click to place, or drag onto canvas." TextWrapping="Wrap" FontSize="11" />
             </Border>
           </StackPanel>
         </ScrollViewer>
@@ -110,15 +196,16 @@
                       HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto">
           <Canvas Name="CircuitCanvas"
-                  Background="#FFF6F6F6"
+                  Background="#FFF6F5EF"
                   Width="1600"
                   Height="900"
                   PointerPressed="CircuitCanvas_PointerPressed"
                   PointerMoved="CircuitCanvas_PointerMoved"
-                  PointerReleased="CircuitCanvas_PointerReleased" />
+                  PointerReleased="CircuitCanvas_PointerReleased"
+                  PointerWheelChanged="CircuitCanvas_PointerWheelChanged" />
         </ScrollViewer>
 
-        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12" BorderBrush="#FFBBBBBB" BorderThickness="1" CornerRadius="6" Padding="10" Background="#EEFFFFFF">
+        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12" BorderBrush="#FF9E9E9E" BorderThickness="1" CornerRadius="0" Padding="10" Background="#EEFAF7EF">
           <StackPanel Spacing="8">
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
               <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/ZoomHS.png" />
@@ -140,25 +227,107 @@
         </Border>
       </Grid>
 
-      <Border Grid.Column="2" BorderBrush="#FFD0D0D0" BorderThickness="1,0,0,0" Padding="12" Background="#FFFCFCFC">
+      <Border Grid.Column="2" Name="SidebarPane" BorderBrush="#FFB7B7B7" BorderThickness="1,0,0,0" Padding="12" Background="#FFF4F1E8">
         <StackPanel Spacing="8">
           <TextBlock FontWeight="SemiBold" Text="Inputs" />
           <StackPanel Name="InputsPanel" Spacing="6" />
 
-          <Separator Margin="0,8,0,8" />
+          <Separator Name="OutputTopSeparator" Margin="0,8,0,8" />
 
-          <TextBlock FontWeight="SemiBold" Text="Output Snapshot" />
-          <TextBlock Name="OutputText" TextWrapping="Wrap" FontFamily="Consolas, Menlo, monospace" />
+          <StackPanel Name="OutputSection" Spacing="4">
+            <TextBlock FontWeight="SemiBold" Text="Output Snapshot" />
+            <TextBlock Name="OutputText" TextWrapping="Wrap" FontFamily="Consolas, Menlo, monospace" />
+          </StackPanel>
 
-          <Separator Margin="0,8,0,8" />
+          <Separator Name="OutputBottomSeparator" Margin="0,8,0,8" />
 
           <TextBlock FontWeight="SemiBold" Text="Notes" />
           <TextBlock Name="InfoText" TextWrapping="Wrap" />
+
+          <Expander Header="Settings" IsExpanded="False">
+            <StackPanel Spacing="6" Margin="0,6,0,0">
+              <CheckBox Name="ShowOutputToggle"
+                        IsChecked="True"
+                        Checked="ShowOutputToggle_Changed"
+                        Unchecked="ShowOutputToggle_Changed"
+                        Content="Show Output Snapshot" />
+              <CheckBox Name="ShowGridToggle"
+                        IsChecked="True"
+                        Checked="ShowGridToggle_Changed"
+                        Unchecked="ShowGridToggle_Changed"
+                        Content="Show Canvas Grid" />
+
+              <TextBlock Text="Pinch Zoom Sensitivity" FontSize="11" />
+              <Slider Name="GestureZoomSensitivitySlider"
+                      Minimum="0.010"
+                      Maximum="0.080"
+                      Value="0.030"
+                      SmallChange="0.002"
+                      LargeChange="0.010"
+                      ValueChanged="GestureZoomSensitivitySlider_ValueChanged" />
+
+              <TextBlock Text="Ctrl+Wheel Zoom Sensitivity" FontSize="11" />
+              <Slider Name="WheelZoomSensitivitySlider"
+                      Minimum="0.020"
+                      Maximum="0.350"
+                      Value="0.160"
+                      SmallChange="0.010"
+                      LargeChange="0.040"
+                      ValueChanged="WheelZoomSensitivitySlider_ValueChanged" />
+
+              <CheckBox Name="InvertWheelZoomToggle"
+                        IsChecked="False"
+                        Checked="InvertWheelZoomToggle_Changed"
+                        Unchecked="InvertWheelZoomToggle_Changed"
+                        Content="Invert Ctrl+Wheel Zoom" />
+
+              <TextBlock Text="Zoom Key Step" FontSize="11" />
+              <Slider Name="ZoomStepSlider"
+                      Minimum="0.05"
+                      Maximum="0.50"
+                      Value="0.12"
+                      SmallChange="0.01"
+                      LargeChange="0.05"
+                      ValueChanged="ZoomStepSlider_ValueChanged" />
+
+              <TextBlock Text="Pan Step (Arrow Keys)" FontSize="11" />
+              <Slider Name="PanStepSlider"
+                      Minimum="20"
+                      Maximum="400"
+                      Value="120"
+                      SmallChange="10"
+                      LargeChange="40"
+                      ValueChanged="PanStepSlider_ValueChanged" />
+
+              <TextBlock Text="Per-step Zoom Clamp Min" FontSize="11" />
+              <Slider Name="ZoomMinFactorSlider"
+                      Minimum="0.50"
+                      Maximum="0.99"
+                      Value="0.90"
+                      SmallChange="0.01"
+                      LargeChange="0.05"
+                      ValueChanged="ZoomMinFactorSlider_ValueChanged" />
+
+              <TextBlock Text="Per-step Zoom Clamp Max" FontSize="11" />
+              <Slider Name="ZoomMaxFactorSlider"
+                      Minimum="1.01"
+                      Maximum="1.80"
+                      Value="1.12"
+                      SmallChange="0.01"
+                      LargeChange="0.05"
+                      ValueChanged="ZoomMaxFactorSlider_ValueChanged" />
+
+              <TextBlock Name="KeybindsText"
+                         TextWrapping="Wrap"
+                         FontSize="11"
+                         FontFamily="Consolas, Menlo, monospace" />
+            </StackPanel>
+          </Expander>
         </StackPanel>
       </Border>
     </Grid>
 
-    <Border Grid.Row="2" BorderBrush="#FFC8C8C8" BorderThickness="0,1,0,0" Background="#FFEEEEEE" Padding="8,4">
+    <Border Grid.Row="3" BorderBrush="#FF9A9A9A" BorderThickness="0,1,0,0" Background="#FFE5E2D6" Padding="8,4">
       <Grid ColumnDefinitions="Auto,16,Auto,16,Auto,*,*">
         <TextBlock Grid.Column="0" Text="Logic Gate Simulator" FontWeight="SemiBold" />
         <TextBlock Grid.Column="2" Text="v1.4 compatibility" />

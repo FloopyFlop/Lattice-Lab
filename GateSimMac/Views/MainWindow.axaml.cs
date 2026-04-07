@@ -73,14 +73,37 @@ public partial class MainWindow : Window
     private bool _endUserMode;
     private bool _useCurvedWires = true;
     private bool _snapToGrid;
+    private bool _showGrid = true;
+    private bool _showOutputSnapshot = true;
+    private bool _showSidebar;
+    private bool _isSyncingMenuState;
+    private double _gestureZoomSensitivity = 0.030;
+    private double _wheelZoomSensitivity = 0.160;
+    private bool _invertWheelZoom;
+    private double _zoomStep = 0.12;
+    private double _panStep = 120;
+    private double _zoomMinFactor = 0.90;
+    private double _zoomMaxFactor = 1.12;
 
     private double _wireFlowOffset;
+
+    private GateClipboardData _gateClipboard;
 
     private static bool _clockPrecessionInitialized;
 
     private const string PaletteIdleText = "Palette: click to place, or drag onto canvas.";
     private const string PaletteGateTypeDataFormat = "GateType";
     private const string IcPalettePrefix = "IC:";
+    private const string KeybindLegendText =
+        "Ctrl/Cmd + C = Copy selected gate\n" +
+        "Ctrl/Cmd + V = Paste gate\n" +
+        "Ctrl/Cmd + I = Inline selected component\n" +
+        "Ctrl/Cmd + Shift + I = Inline all components\n" +
+        "Ctrl/Cmd + +/- = Zoom in/out\n" +
+        "Ctrl/Cmd + 0 = Fit view\n" +
+        "Ctrl/Cmd + 1 = Actual size\n" +
+        "Ctrl/Cmd + Wheel = Zoom to cursor\n" +
+        "Arrow keys = Pan";
 
     private static readonly (string Type, string Label)[] BasicPaletteItems =
     {
@@ -130,6 +153,17 @@ public partial class MainWindow : Window
         public required double Offset { get; init; }
     }
 
+    private sealed class GateClipboardData
+    {
+        public required string Type { get; init; }
+        public required AbstractGate Gate { get; init; }
+        public required List<TerminalLayout> Terminals { get; init; }
+        public required string CommentText { get; init; }
+        public required double Width { get; init; }
+        public required double Height { get; init; }
+        public required double Angle { get; init; }
+    }
+
     private static readonly Dictionary<string, string> GatePath = new(StringComparer.Ordinal)
     {
         ["And"] = "M 17,17 v 30 h 15 a 2,2 1 0 0 0,-30 h -15",
@@ -161,7 +195,7 @@ public partial class MainWindow : Window
         _loadedPath = string.Empty;
 
         InfoText.Text =
-            "Classic-style compatibility editor: drag gates, wire terminals, and interact directly on canvas.";
+            "Classic-style compatibility editor: drag gates, wire terminals, Ctrl/Cmd+C/V to copy/paste, Ctrl/Cmd+I to inline selected component.";
 
         _refreshTimer = new DispatcherTimer
         {
@@ -174,6 +208,21 @@ public partial class MainWindow : Window
         _useCurvedWires = CurvyWiresToggle.IsChecked ?? true;
         _snapToGrid = SnapGridToggle.IsChecked ?? false;
         _lastCanvasPointer = new Point(CircuitCanvas.Width / 2.0, CircuitCanvas.Height / 2.0);
+        _showOutputSnapshot = ShowOutputToggle.IsChecked ?? true;
+        _showGrid = ShowGridToggle.IsChecked ?? true;
+        _gestureZoomSensitivity = GestureZoomSensitivitySlider.Value;
+        _wheelZoomSensitivity = WheelZoomSensitivitySlider.Value;
+        _invertWheelZoom = InvertWheelZoomToggle.IsChecked ?? false;
+        _zoomStep = ZoomStepSlider.Value;
+        _panStep = PanStepSlider.Value;
+        _zoomMinFactor = ZoomMinFactorSlider.Value;
+        _zoomMaxFactor = ZoomMaxFactorSlider.Value;
+        _showSidebar = ShowSidebarMenuItem.IsChecked;
+        KeybindsText.Text = KeybindLegendText;
+        ApplyOutputSectionVisibility();
+        ApplySidebarVisibility();
+        SyncMenuStateFromControls();
+        KeyDown += MainWindow_KeyDown;
 
         InitializePalette();
         ResetPaletteStatus();
@@ -982,18 +1031,21 @@ public partial class MainWindow : Window
     private void ShowTfToggle_Changed(object sender, RoutedEventArgs e)
     {
         _showTrueFalse = ShowTfToggle.IsChecked ?? true;
+        SyncMenuStateFromControls();
         RefreshLiveState();
     }
 
     private void EndUserToggle_Changed(object sender, RoutedEventArgs e)
     {
         _endUserMode = EndUserToggle.IsChecked ?? false;
+        SyncMenuStateFromControls();
         RefreshLiveState();
     }
 
     private void CurvyWiresToggle_Changed(object sender, RoutedEventArgs e)
     {
         _useCurvedWires = CurvyWiresToggle.IsChecked ?? true;
+        SyncMenuStateFromControls();
         UpdateAllWireGeometry();
         if (_isConnecting && _connectionPreview != null)
         {
@@ -1004,6 +1056,371 @@ public partial class MainWindow : Window
     private void SnapGridToggle_Changed(object sender, RoutedEventArgs e)
     {
         _snapToGrid = SnapGridToggle.IsChecked ?? false;
+        SyncMenuStateFromControls();
+    }
+
+    private void ShowOutputToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        _showOutputSnapshot = ShowOutputToggle.IsChecked ?? true;
+        ApplyOutputSectionVisibility();
+        SyncMenuStateFromControls();
+    }
+
+    private void ShowGridToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        _showGrid = ShowGridToggle.IsChecked ?? true;
+        SyncMenuStateFromControls();
+        if (_activeCircuit != null)
+        {
+            RenderCircuit(_activeCircuit);
+        }
+    }
+
+    private void GestureZoomSensitivitySlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        _gestureZoomSensitivity = e.NewValue;
+    }
+
+    private void WheelZoomSensitivitySlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        _wheelZoomSensitivity = e.NewValue;
+    }
+
+    private void InvertWheelZoomToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        _invertWheelZoom = InvertWheelZoomToggle.IsChecked ?? false;
+        SyncMenuStateFromControls();
+    }
+
+    private void ZoomStepSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        _zoomStep = e.NewValue;
+    }
+
+    private void PanStepSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        _panStep = e.NewValue;
+    }
+
+    private void ZoomMinFactorSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        _zoomMinFactor = e.NewValue;
+        if (_zoomMinFactor > _zoomMaxFactor)
+        {
+            _zoomMaxFactor = _zoomMinFactor;
+            ZoomMaxFactorSlider.Value = _zoomMaxFactor;
+        }
+    }
+
+    private void ZoomMaxFactorSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        _zoomMaxFactor = e.NewValue;
+        if (_zoomMaxFactor < _zoomMinFactor)
+        {
+            _zoomMinFactor = _zoomMaxFactor;
+            ZoomMinFactorSlider.Value = _zoomMinFactor;
+        }
+    }
+
+    private void MenuNew_Click(object sender, RoutedEventArgs e)
+    {
+        NewButton_Click(sender, e);
+    }
+
+    private void MenuOpen_Click(object sender, RoutedEventArgs e)
+    {
+        OpenButton_Click(sender, e);
+    }
+
+    private void MenuReload_Click(object sender, RoutedEventArgs e)
+    {
+        ReloadButton_Click(sender, e);
+    }
+
+    private void MenuCreateComponent_Click(object sender, RoutedEventArgs e)
+    {
+        CreateComponentButton_Click(sender, e);
+    }
+
+    private void MenuDeleteSelected_Click(object sender, RoutedEventArgs e)
+    {
+        DeleteButton_Click(sender, e);
+    }
+
+    private void MenuInlineSelected_Click(object sender, RoutedEventArgs e)
+    {
+        InlineSelectedComponent();
+    }
+
+    private void MenuInlineAll_Click(object sender, RoutedEventArgs e)
+    {
+        InlineAllComponents();
+    }
+
+    private void MenuCopyGate_Click(object sender, RoutedEventArgs e)
+    {
+        CopySelectedGate();
+    }
+
+    private void MenuPasteGate_Click(object sender, RoutedEventArgs e)
+    {
+        PasteCopiedGate();
+    }
+
+    private void MenuActualSize_Click(object sender, RoutedEventArgs e)
+    {
+        ActualSizeButton_Click(sender, e);
+    }
+
+    private void MenuFitCircuit_Click(object sender, RoutedEventArgs e)
+    {
+        FitButton_Click(sender, e);
+    }
+
+    private void ShowSidebarMenuItem_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isSyncingMenuState)
+        {
+            return;
+        }
+
+        _showSidebar = ShowSidebarMenuItem.IsChecked;
+        ApplySidebarVisibility();
+    }
+
+    private void ShowOutputMenuItem_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isSyncingMenuState)
+        {
+            return;
+        }
+
+        ShowOutputToggle.IsChecked = ShowOutputMenuItem.IsChecked;
+    }
+
+    private void ShowGridMenuItem_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isSyncingMenuState)
+        {
+            return;
+        }
+
+        ShowGridToggle.IsChecked = ShowGridMenuItem.IsChecked;
+    }
+
+    private void ShowTrueFalseMenuItem_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isSyncingMenuState)
+        {
+            return;
+        }
+
+        ShowTfToggle.IsChecked = ShowTrueFalseMenuItem.IsChecked;
+    }
+
+    private void CurvyWiresMenuItem_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isSyncingMenuState)
+        {
+            return;
+        }
+
+        CurvyWiresToggle.IsChecked = CurvyWiresMenuItem.IsChecked;
+    }
+
+    private void SnapToGridMenuItem_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isSyncingMenuState)
+        {
+            return;
+        }
+
+        SnapGridToggle.IsChecked = SnapToGridMenuItem.IsChecked;
+    }
+
+    private void EndUserModeMenuItem_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isSyncingMenuState)
+        {
+            return;
+        }
+
+        EndUserToggle.IsChecked = EndUserModeMenuItem.IsChecked;
+    }
+
+    private void InvertWheelZoomMenuItem_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isSyncingMenuState)
+        {
+            return;
+        }
+
+        InvertWheelZoomToggle.IsChecked = InvertWheelZoomMenuItem.IsChecked;
+    }
+
+    private void MenuZoomStepIncrease_Click(object sender, RoutedEventArgs e)
+    {
+        ZoomStepSlider.Value = Math.Min(ZoomStepSlider.Maximum, ZoomStepSlider.Value + 0.02);
+    }
+
+    private void MenuZoomStepDecrease_Click(object sender, RoutedEventArgs e)
+    {
+        ZoomStepSlider.Value = Math.Max(ZoomStepSlider.Minimum, ZoomStepSlider.Value - 0.02);
+    }
+
+    private void MenuPanStepIncrease_Click(object sender, RoutedEventArgs e)
+    {
+        PanStepSlider.Value = Math.Min(PanStepSlider.Maximum, PanStepSlider.Value + 20);
+    }
+
+    private void MenuPanStepDecrease_Click(object sender, RoutedEventArgs e)
+    {
+        PanStepSlider.Value = Math.Max(PanStepSlider.Minimum, PanStepSlider.Value - 20);
+    }
+
+    private void ApplyOutputSectionVisibility()
+    {
+        bool visible = _showOutputSnapshot;
+        OutputTopSeparator.IsVisible = visible;
+        OutputBottomSeparator.IsVisible = visible;
+        OutputSection.IsVisible = visible;
+    }
+
+    private void ApplySidebarVisibility()
+    {
+        if (MainContentGrid.ColumnDefinitions.Count > 2)
+        {
+            MainContentGrid.ColumnDefinitions[2].Width = _showSidebar
+                ? new GridLength(310)
+                : new GridLength(0);
+        }
+
+        SidebarPane.IsVisible = _showSidebar;
+    }
+
+    private void SyncMenuStateFromControls()
+    {
+        _isSyncingMenuState = true;
+        try
+        {
+            ShowSidebarMenuItem.IsChecked = _showSidebar;
+            ShowOutputMenuItem.IsChecked = _showOutputSnapshot;
+            ShowGridMenuItem.IsChecked = _showGrid;
+            ShowTrueFalseMenuItem.IsChecked = _showTrueFalse;
+            CurvyWiresMenuItem.IsChecked = _useCurvedWires;
+            SnapToGridMenuItem.IsChecked = _snapToGrid;
+            EndUserModeMenuItem.IsChecked = _endUserMode;
+            InvertWheelZoomMenuItem.IsChecked = _invertWheelZoom;
+        }
+        finally
+        {
+            _isSyncingMenuState = false;
+        }
+    }
+
+    private static bool HasCommandModifier(KeyModifiers modifiers)
+    {
+        return modifiers.HasFlag(KeyModifiers.Control) || modifiers.HasFlag(KeyModifiers.Meta);
+    }
+
+    private void MainWindow_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (_activeCircuit == null || e.Source is TextBox)
+        {
+            return;
+        }
+
+        bool command = HasCommandModifier(e.KeyModifiers);
+
+        if (command && e.Key == Key.C)
+        {
+            CopySelectedGate();
+            e.Handled = true;
+            return;
+        }
+
+        if (command && e.Key == Key.V)
+        {
+            PasteCopiedGate();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Delete && _selectedGate != null)
+        {
+            DeleteGate(_selectedGate);
+            e.Handled = true;
+            return;
+        }
+
+        if (command && e.Key == Key.I && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            InlineAllComponents();
+            e.Handled = true;
+            return;
+        }
+
+        if (command && e.Key == Key.I)
+        {
+            InlineSelectedComponent();
+            e.Handled = true;
+            return;
+        }
+
+        if (command && (e.Key == Key.Add || e.Key == Key.OemPlus))
+        {
+            ZoomByFactor(1.0 + _zoomStep, GetZoomAnchorFallback());
+            e.Handled = true;
+            return;
+        }
+
+        if (command && (e.Key == Key.Subtract || e.Key == Key.OemMinus))
+        {
+            ZoomByFactor(Math.Max(0.01, 1.0 - _zoomStep), GetZoomAnchorFallback());
+            e.Handled = true;
+            return;
+        }
+
+        if (command && (e.Key == Key.D0 || e.Key == Key.NumPad0))
+        {
+            FitButton_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (command && (e.Key == Key.D1 || e.Key == Key.NumPad1))
+        {
+            ActualSizeButton_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        double pan = _panStep * (e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? 2.0 : 1.0);
+        switch (e.Key)
+        {
+            case Key.Left:
+                PanCanvas(-pan, 0);
+                e.Handled = true;
+                break;
+            case Key.Right:
+                PanCanvas(pan, 0);
+                e.Handled = true;
+                break;
+            case Key.Up:
+                PanCanvas(0, -pan);
+                e.Handled = true;
+                break;
+            case Key.Down:
+                PanCanvas(0, pan);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void PanCanvas(double dx, double dy)
+    {
+        Vector desired = new(CanvasScroll.Offset.X + dx, CanvasScroll.Offset.Y + dy);
+        CanvasScroll.Offset = ClampCanvasOffset(desired);
     }
 
     private void CircuitCanvas_PointerPressed(object sender, PointerPressedEventArgs e)
@@ -1021,6 +1438,8 @@ public partial class MainWindow : Window
             CancelConnection();
             _pendingAddGateType = null;
             ResetPaletteStatus();
+            ShowCanvasContextMenu();
+            e.Handled = true;
             return;
         }
 
@@ -1178,15 +1597,28 @@ public partial class MainWindow : Window
             return;
         }
 
+        double previousZoom = _zoom;
+        Vector previousOffset = CanvasScroll.Offset;
         Point anchor = anchorCanvasPoint ?? GetViewportCenterInCanvas();
         _zoom = clampedZoom;
         ApplyZoom();
 
         if (CanvasScroll.Viewport.Width > 1 && CanvasScroll.Viewport.Height > 1)
         {
-            Vector desiredOffset = new(
-                (anchor.X * _zoom) - (CanvasScroll.Viewport.Width / 2.0),
-                (anchor.Y * _zoom) - (CanvasScroll.Viewport.Height / 2.0));
+            Vector desiredOffset;
+            if (anchorCanvasPoint.HasValue)
+            {
+                // Keep anchored zoom stable around pointer/anchor rather than snapping to center.
+                desiredOffset = new Vector(
+                    previousOffset.X + (anchor.X * (_zoom - previousZoom)),
+                    previousOffset.Y + (anchor.Y * (_zoom - previousZoom)));
+            }
+            else
+            {
+                desiredOffset = new Vector(
+                    (anchor.X * _zoom) - (CanvasScroll.Viewport.Width / 2.0),
+                    (anchor.Y * _zoom) - (CanvasScroll.Viewport.Height / 2.0));
+            }
 
             CanvasScroll.Offset = ClampCanvasOffset(desiredOffset);
         }
@@ -1257,8 +1689,8 @@ public partial class MainWindow : Window
         }
 
         // Faster than before, but still clamped to avoid jumpy snap zoom.
-        double factor = Math.Exp(delta * 0.03);
-        factor = Math.Clamp(factor, 0.90, 1.12);
+        double factor = Math.Exp(delta * _gestureZoomSensitivity);
+        factor = Math.Clamp(factor, _zoomMinFactor, _zoomMaxFactor);
 
         Point anchor = GetZoomAnchorFallback();
         try
@@ -1271,6 +1703,28 @@ public partial class MainWindow : Window
             // Gesture event may not always expose a local pointer position.
         }
 
+        ZoomByFactor(factor, anchor);
+        e.Handled = true;
+    }
+
+    private void CircuitCanvas_PointerWheelChanged(object sender, PointerWheelEventArgs e)
+    {
+        if (!HasCommandModifier(e.KeyModifiers))
+        {
+            return;
+        }
+
+        double delta = _invertWheelZoom ? -e.Delta.Y : e.Delta.Y;
+        if (Math.Abs(delta) < 0.0001)
+        {
+            return;
+        }
+
+        double factor = Math.Exp(delta * _wheelZoomSensitivity);
+        factor = Math.Clamp(factor, _zoomMinFactor, _zoomMaxFactor);
+
+        Point anchor = e.GetPosition(CircuitCanvas);
+        UpdateLastCanvasPointer(anchor);
         ZoomByFactor(factor, anchor);
         e.Handled = true;
     }
@@ -1354,6 +1808,11 @@ public partial class MainWindow : Window
 
     private void DrawCanvasGrid()
     {
+        if (!_showGrid)
+        {
+            return;
+        }
+
         const int grid = 32;
 
         for (int x = 0; x <= CircuitCanvas.Width; x += grid)
@@ -1889,7 +2348,7 @@ public partial class MainWindow : Window
         if (e.GetCurrentPoint(visual).Properties.IsRightButtonPressed)
         {
             SelectGate(gate);
-            DeleteGate(gate);
+            ShowGateContextMenu(gate, visual);
             e.Handled = true;
             return;
         }
@@ -1963,6 +2422,82 @@ public partial class MainWindow : Window
             e.Pointer.Capture(null);
             e.Handled = true;
         }
+    }
+
+    private void ShowCanvasContextMenu()
+    {
+        MenuItem paste = new() { Header = "Paste Gate" };
+        paste.Click += (_, _) => PasteCopiedGate();
+
+        MenuItem actualSize = new() { Header = "Actual Size" };
+        actualSize.Click += (_, _) => ActualSizeButton_Click(this, new RoutedEventArgs());
+
+        MenuItem fit = new() { Header = "Fit Circuit" };
+        fit.Click += (_, _) => FitButton_Click(this, new RoutedEventArgs());
+
+        ContextMenu menu = new()
+        {
+            ItemsSource = new object[]
+            {
+                paste,
+                new Separator(),
+                actualSize,
+                fit,
+            },
+        };
+
+        menu.Open(CircuitCanvas);
+    }
+
+    private void ShowGateContextMenu(GatePlacement gate, Control target)
+    {
+        MenuItem copy = new() { Header = "Copy Gate" };
+        copy.Click += (_, _) =>
+        {
+            SelectGate(gate);
+            CopySelectedGate();
+        };
+
+        MenuItem paste = new() { Header = "Paste Gate" };
+        paste.Click += (_, _) => PasteCopiedGate();
+
+        MenuItem delete = new() { Header = "Delete Gate" };
+        delete.Click += (_, _) =>
+        {
+            SelectGate(gate);
+            DeleteGate(gate);
+        };
+
+        List<object> items = new()
+        {
+            copy,
+            paste,
+            new Separator(),
+        };
+
+        if (gate.Gate is IC)
+        {
+            MenuItem inline = new() { Header = "Inline Component" };
+            inline.Click += (_, _) =>
+            {
+                SelectGate(gate);
+                InlineSelectedComponent();
+            };
+            items.Add(inline);
+        }
+
+        MenuItem inlineAll = new() { Header = "Inline All Components" };
+        inlineAll.Click += (_, _) => InlineAllComponents();
+        items.Add(inlineAll);
+        items.Add(new Separator());
+        items.Add(delete);
+
+        ContextMenu menu = new()
+        {
+            ItemsSource = items,
+        };
+
+        menu.Open(target);
     }
 
     private void TerminalDot_PointerPressed(GatePlacement gate, TerminalLayout terminal, PointerPressedEventArgs e)
@@ -2209,6 +2744,486 @@ public partial class MainWindow : Window
         InfoLineText.Text = "Gate deleted";
     }
 
+    private void CopySelectedGate()
+    {
+        if (_selectedGate == null)
+        {
+            StatusText.Text = "Copy skipped";
+            InfoLineText.Text = "Select a gate first.";
+            return;
+        }
+
+        _gateClipboard = new GateClipboardData
+        {
+            Type = _selectedGate.Type,
+            Gate = _selectedGate.Gate.Clone(),
+            Terminals = CloneTerminalLayouts(_selectedGate.Terminals),
+            CommentText = _selectedGate.CommentText,
+            Width = _selectedGate.Width,
+            Height = _selectedGate.Height,
+            Angle = _selectedGate.Angle,
+        };
+
+        StatusText.Text = "Copied";
+        InfoLineText.Text = $"Copied {_selectedGate.Name}.";
+    }
+
+    private void PasteCopiedGate()
+    {
+        if (_activeCircuit == null)
+        {
+            return;
+        }
+
+        if (_gateClipboard == null)
+        {
+            StatusText.Text = "Paste skipped";
+            InfoLineText.Text = "Clipboard is empty.";
+            return;
+        }
+
+        try
+        {
+            Point anchor = _selectedGate != null
+                ? new Point(
+                    _offsetX + _selectedGate.X + (_selectedGate.Width / 2.0) + 28,
+                    _offsetY + _selectedGate.Y + (_selectedGate.Height / 2.0) + 28)
+                : new Point(GetZoomAnchorFallback().X + 28, GetZoomAnchorFallback().Y + 28);
+
+            GatePlacement placement = CreatePlacementFromClipboard(anchor);
+            _activeCircuit.Circuit.Add(placement.Gate);
+            _activeCircuit.Gates.Add(placement);
+
+            RenderCircuit(_activeCircuit);
+            RenderInputPanel(_activeCircuit);
+            SelectGate(placement);
+
+            StatusText.Text = "Pasted";
+            InfoLineText.Text = $"Added {placement.Name}";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "Paste failed";
+            InfoText.Text = ex.Message;
+        }
+    }
+
+    private GatePlacement CreatePlacementFromClipboard(Point canvasPoint)
+    {
+        if (_activeCircuit == null || _gateClipboard == null)
+        {
+            throw new InvalidOperationException("Cannot paste without an active circuit and copied gate.");
+        }
+
+        AbstractGate gate = _gateClipboard.Gate.Clone();
+        List<TerminalLayout> terminals = CloneTerminalLayouts(_gateClipboard.Terminals);
+
+        double left = canvasPoint.X - (_gateClipboard.Width / 2.0);
+        double top = canvasPoint.Y - (_gateClipboard.Height / 2.0);
+
+        left = _snapToGrid ? SnapToGrid(left) : SnapToStep(left, 2.0);
+        top = _snapToGrid ? SnapToGrid(top) : SnapToStep(top, 2.0);
+
+        int nextId = _activeCircuit.Gates.Count == 0 ? 1 : _activeCircuit.Gates.Max(g => g.Id) + 1;
+
+        GatePlacement placement = new()
+        {
+            Id = nextId,
+            Type = _gateClipboard.Type,
+            Name = GenerateGateName(gate.Name),
+            Gate = gate,
+            X = left - _offsetX,
+            Y = top - _offsetY,
+            Angle = _gateClipboard.Angle,
+            Width = _gateClipboard.Width,
+            Height = _gateClipboard.Height,
+            CommentText = gate is Comment c ? c.Value : _gateClipboard.CommentText,
+        };
+
+        placement.Terminals.AddRange(terminals);
+        placement.RebuildTerminalLookup();
+        return placement;
+    }
+
+    private void InlineSelectedComponent()
+    {
+        if (_activeCircuit == null || _selectedGate == null)
+        {
+            return;
+        }
+
+        if (_selectedGate.Gate is not IC)
+        {
+            StatusText.Text = "Inline skipped";
+            InfoLineText.Text = "Select a custom component (IC) to inline.";
+            return;
+        }
+
+        bool wasRunning = _activeCircuit.Circuit.IsRunning;
+        try
+        {
+            if (wasRunning)
+            {
+                _activeCircuit.Circuit.Stop();
+            }
+
+            GatePlacement selected = _selectedGate;
+            if (!InlineComponentPlacement(selected, selectFocus: true, out _))
+            {
+                StatusText.Text = "Inline skipped";
+                InfoLineText.Text = "Component has no internal gates.";
+                return;
+            }
+
+            StatusText.Text = "Inlined";
+            InfoLineText.Text = $"Inlined {selected.Name}.";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "Inline failed";
+            InfoText.Text = ex.Message;
+        }
+        finally
+        {
+            if (wasRunning && _activeCircuit != null)
+            {
+                _activeCircuit.Circuit.Start();
+            }
+        }
+    }
+
+    private void InlineAllComponents()
+    {
+        if (_activeCircuit == null)
+        {
+            return;
+        }
+
+        bool wasRunning = _activeCircuit.Circuit.IsRunning;
+        try
+        {
+            if (wasRunning)
+            {
+                _activeCircuit.Circuit.Stop();
+            }
+
+            int inlinedCount = 0;
+            GatePlacement firstFocus = null;
+
+            while (true)
+            {
+                GatePlacement nextIc = _activeCircuit.Gates.FirstOrDefault(g => g.Gate is IC);
+                if (nextIc == null)
+                {
+                    break;
+                }
+
+                if (!InlineComponentPlacement(nextIc, selectFocus: false, out GatePlacement focus))
+                {
+                    StatusText.Text = "Flatten skipped";
+                    InfoLineText.Text = $"Component '{nextIc.Name}' has no internal gates.";
+                    return;
+                }
+
+                firstFocus ??= focus;
+                inlinedCount++;
+
+                if (inlinedCount > 512)
+                {
+                    throw new InvalidOperationException("Flatten safety limit reached (possible recursive component loop).");
+                }
+            }
+
+            if (inlinedCount == 0)
+            {
+                StatusText.Text = "Flatten skipped";
+                InfoLineText.Text = "No custom components found.";
+                return;
+            }
+
+            if (firstFocus != null && _activeCircuit.Gates.Contains(firstFocus))
+            {
+                SelectGate(firstFocus);
+            }
+            else
+            {
+                SelectGate(null);
+            }
+
+            StatusText.Text = "Flattened";
+            InfoLineText.Text = $"Inlined {inlinedCount} component(s).";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "Flatten failed";
+            InfoText.Text = ex.Message;
+        }
+        finally
+        {
+            if (wasRunning && _activeCircuit != null)
+            {
+                _activeCircuit.Circuit.Start();
+            }
+        }
+    }
+
+    private bool InlineComponentPlacement(GatePlacement icPlacement, bool selectFocus, out GatePlacement focus)
+    {
+        focus = null;
+        if (_activeCircuit == null || icPlacement?.Gate is not IC icGate)
+        {
+            return false;
+        }
+
+        Circuit clonedInnerCircuit = icGate.Circuit.Clone();
+        List<AbstractGate> clonedInnerGates = clonedInnerCircuit.ToList();
+        if (clonedInnerGates.Count == 0)
+        {
+            return false;
+        }
+
+        UserInput[] clonedInputs = icGate.Inputs
+            .Select(input => (UserInput)clonedInnerGates[icGate.Circuit.IndexOf(input)])
+            .ToArray();
+        UserOutput[] clonedOutputs = icGate.Outputs
+            .Select(output => (UserOutput)clonedInnerGates[icGate.Circuit.IndexOf(output)])
+            .ToArray();
+
+        int nextId = _activeCircuit.Gates.Count == 0 ? 1 : _activeCircuit.Gates.Max(g => g.Id) + 1;
+        int columns = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(clonedInnerGates.Count)));
+        const double spacing = 96.0;
+        double baseX = icPlacement.X - 16.0;
+        double baseY = icPlacement.Y - 16.0;
+
+        var placementByInnerGate = new Dictionary<AbstractGate, GatePlacement>();
+        var newPlacements = new List<GatePlacement>(clonedInnerGates.Count);
+
+        for (int i = 0; i < clonedInnerGates.Count; i++)
+        {
+            AbstractGate innerGate = clonedInnerGates[i];
+            string type = ResolveGateType(innerGate);
+            List<TerminalLayout> terminals = BuildGateTerminalLayoutsForPlacement(type, innerGate);
+            (double width, double height) = EstimateGateSize(
+                type,
+                innerGate.Name,
+                innerGate is Comment cmt ? cmt.Value : null,
+                terminals);
+
+            int col = i % columns;
+            int row = i / columns;
+            double modelLeft = baseX + (col * spacing);
+            double modelTop = baseY + (row * spacing);
+
+            double snappedCanvasLeft = _snapToGrid
+                ? SnapToGrid(_offsetX + modelLeft)
+                : SnapToStep(_offsetX + modelLeft, 2.0);
+            double snappedCanvasTop = _snapToGrid
+                ? SnapToGrid(_offsetY + modelTop)
+                : SnapToStep(_offsetY + modelTop, 2.0);
+
+            GatePlacement placement = new()
+            {
+                Id = nextId++,
+                Type = type,
+                Name = GenerateGateName(innerGate.Name),
+                Gate = innerGate,
+                X = snappedCanvasLeft - _offsetX,
+                Y = snappedCanvasTop - _offsetY,
+                Angle = 0,
+                Width = width,
+                Height = height,
+                CommentText = innerGate is Comment comment ? comment.Value : null,
+            };
+            placement.Terminals.AddRange(terminals);
+            placement.RebuildTerminalLookup();
+
+            _activeCircuit.Circuit.Add(innerGate);
+            _activeCircuit.Gates.Add(placement);
+            placementByInnerGate[innerGate] = placement;
+            newPlacements.Add(placement);
+        }
+
+        foreach (AbstractGate targetGate in clonedInnerGates)
+        {
+            for (int inputPort = 0; inputPort < targetGate.NumberOfInputs; inputPort++)
+            {
+                Terminal source = clonedInnerCircuit.GetSource(new Terminal(inputPort, targetGate));
+                if (source == null)
+                {
+                    continue;
+                }
+
+                ConnectWireModel(
+                    placementByInnerGate[source.gate],
+                    source.portNumber,
+                    placementByInnerGate[targetGate],
+                    inputPort);
+            }
+        }
+
+        List<WirePlacement> incomingExternal = _activeCircuit.Wires.Where(w => w.ToGate == icPlacement).ToList();
+        List<WirePlacement> outgoingExternal = _activeCircuit.Wires.Where(w => w.FromGate == icPlacement).ToList();
+
+        foreach (WirePlacement incoming in incomingExternal)
+        {
+            if (incoming.ToPort < 0 || incoming.ToPort >= clonedInputs.Length)
+            {
+                continue;
+            }
+
+            List<Terminal> targets = clonedInnerCircuit.GetTargets(new Terminal(0, clonedInputs[incoming.ToPort]));
+            foreach (Terminal target in targets)
+            {
+                if (placementByInnerGate.TryGetValue(target.gate, out GatePlacement targetPlacement))
+                {
+                    ConnectWireModel(incoming.FromGate, incoming.FromPort, targetPlacement, target.portNumber);
+                }
+            }
+        }
+
+        foreach (WirePlacement outgoing in outgoingExternal)
+        {
+            if (outgoing.FromPort < 0 || outgoing.FromPort >= clonedOutputs.Length)
+            {
+                continue;
+            }
+
+            Terminal source = clonedInnerCircuit.GetSource(new Terminal(0, clonedOutputs[outgoing.FromPort]));
+            if (source == null)
+            {
+                continue;
+            }
+
+            if (placementByInnerGate.TryGetValue(source.gate, out GatePlacement sourcePlacement))
+            {
+                ConnectWireModel(sourcePlacement, source.portNumber, outgoing.ToGate, outgoing.ToPort);
+            }
+        }
+
+        RemoveGateModel(icPlacement);
+        foreach (GatePlacement endpoint in newPlacements.Where(p => p.Gate is UserInput or UserOutput).ToList())
+        {
+            RemoveGateModel(endpoint);
+        }
+
+        RenderCircuit(_activeCircuit);
+        RenderInputPanel(_activeCircuit);
+
+        focus = newPlacements.FirstOrDefault(p => p.Gate is not UserInput and not UserOutput);
+        if (selectFocus)
+        {
+            if (focus != null && _activeCircuit.Gates.Contains(focus))
+            {
+                SelectGate(focus);
+            }
+            else
+            {
+                SelectGate(null);
+            }
+        }
+
+        return true;
+    }
+
+    private static string ResolveGateType(AbstractGate gate)
+    {
+        return gate switch
+        {
+            Gates.BasicGates.And => "And",
+            Gates.BasicGates.Not => "Not",
+            Gates.BasicGates.Or => "Or",
+            Gates.BasicGates.Nand => "Nand",
+            Gates.BasicGates.Nor => "Nor",
+            Gates.BasicGates.Xor => "Xor",
+            Gates.BasicGates.Xnor => "Xnor",
+            Gates.BasicGates.Buffer => "Buffer",
+            UserInput => "UserInput",
+            UserOutput => "UserOutput",
+            NumericInput => "NumericInput",
+            NumericOutput => "NumericOutput",
+            Clock => "Clock",
+            Comment => "Comment",
+            IC => "IC",
+            _ => throw new InvalidOperationException($"Unsupported inner gate type {gate.GetType().Name}."),
+        };
+    }
+
+    private List<TerminalLayout> BuildGateTerminalLayoutsForPlacement(string type, AbstractGate gate)
+    {
+        if (type == "IC" && gate is IC ic && _namedIcTemplates.TryGetValue(ic.Name, out NamedIcTemplate template))
+        {
+            return CloneTerminalLayouts(template.Terminals);
+        }
+
+        if (type == "IC")
+        {
+            var descriptors = new List<(bool IsInput, int PortIndex, PortSide Side)>();
+            for (int i = 0; i < gate.NumberOfInputs; i++)
+            {
+                descriptors.Add((true, i, PortSide.Left));
+            }
+
+            for (int i = 0; i < gate.Output.Length; i++)
+            {
+                descriptors.Add((false, i, PortSide.Right));
+            }
+
+            return BuildTerminalLayouts(descriptors);
+        }
+
+        return BuildGateTerminalLayouts(type, gate);
+    }
+
+    private void ConnectWireModel(GatePlacement fromGate, int fromPort, GatePlacement toGate, int toPort)
+    {
+        if (_activeCircuit == null)
+        {
+            return;
+        }
+
+        WirePlacement existing = _activeCircuit.Wires.FirstOrDefault(w => w.ToGate == toGate && w.ToPort == toPort);
+        if (existing != null)
+        {
+            _activeCircuit.Circuit.Disconnect(new Terminal(existing.ToPort, existing.ToGate.Gate));
+            _activeCircuit.Wires.Remove(existing);
+        }
+
+        _activeCircuit.Circuit[new Terminal(toPort, toGate.Gate)] = new Terminal(fromPort, fromGate.Gate);
+        _activeCircuit.Wires.Add(new WirePlacement
+        {
+            FromGate = fromGate,
+            FromPort = fromPort,
+            ToGate = toGate,
+            ToPort = toPort,
+        });
+    }
+
+    private void RemoveGateModel(GatePlacement gate)
+    {
+        if (_activeCircuit == null || gate == null)
+        {
+            return;
+        }
+
+        List<WirePlacement> touching = _activeCircuit.Wires
+            .Where(w => w.FromGate == gate || w.ToGate == gate)
+            .ToList();
+
+        foreach (WirePlacement wire in touching)
+        {
+            _activeCircuit.Circuit.Disconnect(new Terminal(wire.ToPort, wire.ToGate.Gate));
+            _activeCircuit.Wires.Remove(wire);
+        }
+
+        _activeCircuit.Circuit.Remove(gate.Gate);
+        _activeCircuit.Gates.Remove(gate);
+
+        if (_selectedGate == gate)
+        {
+            _selectedGate = null;
+        }
+    }
+
     private void AddGateFromPalette(string type, Point canvasPoint)
     {
         if (_activeCircuit == null)
@@ -2272,7 +3287,7 @@ public partial class MainWindow : Window
                 _ => throw new InvalidOperationException($"Unsupported palette gate '{type}'."),
             };
             placementName = gate.Name;
-            terminals = BuildGateTerminalLayouts(placementType, gate);
+            terminals = BuildGateTerminalLayoutsForPlacement(placementType, gate);
         }
 
         (double width, double height) = EstimateGateSize(placementType, placementName, null, terminals);
