@@ -2,9 +2,9 @@ using System.Globalization;
 using System.Xml.Linq;
 using Gates;
 using Gates.IOGates;
-using GateSimMac.Models;
+using LatticeLab.Models;
 
-namespace GateSimMac.Logic;
+namespace LatticeLab.Logic;
 
 public static class LegacyCircuitLoader
 {

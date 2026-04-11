@@ -1,7 +1,7 @@
 using Avalonia;
-using GateSimMac.Logic;
+using LatticeLab.Logic;
 
-namespace GateSimMac;
+namespace LatticeLab;
 
 internal static class Program
 {

@@ -1,8 +1,8 @@
-# Logic Gate Simulator (GateSim)
+# Lattice Lab
 
-A classic digital logic simulator originally created by **Steve Kollmansberger**.
+Lattice Lab is this fork's active iteration of the classic digital logic simulator originally created by **Steve Kollmansberger**.
 
-This repository preserves the original project structure and logic engine, and includes a modern macOS-compatible UI runner (`GateSimMac`) built on Avalonia.
+This repository preserves the original project structure and logic engine, and includes the modern cross-platform Avalonia app for this fork in [`LatticeLab/`](./LatticeLab).
 
 ## Credit and Original Project
 
@@ -15,10 +15,10 @@ This repository preserves the original project structure and logic engine, and i
 
 - `Gates/`: original simulation core (gates, circuits, propagation, IC behavior)
 - `GatesWpf/`: legacy WPF application (original desktop UI)
-- `GateSimMac/`: Avalonia-based compatibility UI for macOS/Linux/Windows
-- `scripts/run-gatesim-mac.sh`: convenience launcher for `GateSimMac`
+- `LatticeLab/`: Avalonia-based UI for this Lattice Lab iteration
+- `scripts/run-lattice-lab.sh`: convenience launcher for `LatticeLab`
 
-## Running the Compatibility App (GateSimMac)
+## Running Lattice Lab
 
 ### Prerequisites
 
@@ -27,30 +27,30 @@ This repository preserves the original project structure and logic engine, and i
 ### Start the app
 
 ```bash
-./scripts/run-gatesim-mac.sh
+./scripts/run-lattice-lab.sh
 ```
 
 Or run directly with `dotnet`:
 
 ```bash
-dotnet run --project GateSimMac/GateSimMac.csproj
+dotnet run --project LatticeLab/LatticeLab.csproj
 ```
 
 ### Open a circuit file on launch
 
 ```bash
-./scripts/run-gatesim-mac.sh /absolute/path/to/circuit.gcg
+./scripts/run-lattice-lab.sh /absolute/path/to/circuit.gcg
 ```
 
 ### Validate a circuit file from terminal (no GUI)
 
 ```bash
-./scripts/run-gatesim-mac.sh --validate /absolute/path/to/circuit.gcg
+./scripts/run-lattice-lab.sh --validate /absolute/path/to/circuit.gcg
 ```
 
 ## File Formats
 
-The compatibility app opens legacy GateSim formats:
+The compatibility app opens the legacy circuit formats used by the original project:
 
 - `.gcg`
 - `.gcf`
@@ -68,11 +68,40 @@ Use the **Open** button in the top toolbar, or pass a file path on launch.
 
 ### Editing
 
-The compatibility UI supports classic interaction patterns including gate placement, drag/drop, wiring, custom components, and live simulation controls.
+The compatibility UI supports classic interaction patterns including gate placement, drag/drop, wiring, custom components, copy/paste, inline/flatten operations, and live simulation controls.
+
+### Menus and Controls
+
+- The top menu bar is the main control surface for the modern compatibility UI.
+- **File**: new circuit, open, reload, create component
+- **Edit**: copy selected gate, paste gate, inline selected component, inline all components, delete selected gate
+- **View**: show/hide the sidebar, show/hide output snapshot, show/hide canvas grid, actual size, fit circuit
+- **Settings**: true/false colors, curved wires, snap to grid, end-user mode, invert Ctrl+Wheel zoom, zoom/pan step adjustments
+
+### Canvas Interaction
+
+- Drag gates from the left shelf onto the canvas, or click a palette item and then click the canvas to place it
+- Drag from an output terminal to an input terminal to create a wire
+- Click or right-click a wire to disconnect it
+- Right-click the canvas for quick actions such as paste and view controls
+- Right-click a gate for a context menu with copy, paste, inline, and delete actions
+
+### Keyboard Shortcuts
+
+- `Ctrl/Cmd + C`: copy selected gate
+- `Ctrl/Cmd + V`: paste gate
+- `Ctrl/Cmd + I`: inline selected custom component
+- `Ctrl/Cmd + Shift + I`: inline all custom components in the active circuit
+- `Ctrl/Cmd + +/-`: zoom in/out
+- `Ctrl/Cmd + 0`: fit circuit
+- `Ctrl/Cmd + 1`: actual size
+- `Ctrl/Cmd + mouse wheel` or trackpad gesture: zoom toward the pointer
+- Arrow keys: pan the canvas
+- `Delete`: delete selected gate
 
 ### Saving
 
-At this stage, `GateSimMac` does **not** yet include a save/export UI path for writing `.gcg/.gcf/.ic` back to disk.
+At this stage, `LatticeLab` does **not** yet include a save/export UI path for writing `.gcg/.gcf/.ic` back to disk.
 
 If you need save/export today, use the legacy `GatesWpf` application workflow.
 
@@ -82,7 +111,7 @@ If you need save/export today, use the legacy `GatesWpf` application workflow.
 2. Pick the active circuit from the top circuit dropdown.
 3. Drag gates/components from the left shelf onto the canvas.
 4. Wire outputs to inputs, then run live by toggling inputs/clocks.
-5. Use the right panel for input controls and output snapshot.
+5. Use the top menu for edit/view/settings actions, and enable **View > Show Sidebar** if you want the optional right-side inputs/output panel.
 
 ## Dependency Install (Per OS)
 
@@ -91,11 +120,11 @@ Use this as a quick baseline setup before running the app.
 ### Rendering/UI Dependencies (Important)
 
 - The app uses **Avalonia** for UI/rendering.
-- Avalonia packages are already declared in `GateSimMac/GateSimMac.csproj` and are restored automatically by `dotnet restore/build`.
+- Avalonia packages are already declared in `LatticeLab/LatticeLab.csproj` and are restored automatically by `dotnet restore/build`.
 - You do **not** install Avalonia manually as a separate system package.
 
 ```bash
-dotnet restore GateSimMac/GateSimMac.csproj
+dotnet restore LatticeLab/LatticeLab.csproj
 ```
 
 ### macOS

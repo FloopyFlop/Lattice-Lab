@@ -2,7 +2,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GateSimMac", "GateSimMac.csproj", "{D061DE48-906D-09F7-44AA-31DCD1A65E9F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LatticeLab", "LatticeLab.csproj", "{D061DE48-906D-09F7-44AA-31DCD1A65E9F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

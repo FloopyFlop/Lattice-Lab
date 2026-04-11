@@ -1,6 +1,6 @@
 using Gates;
 
-namespace GateSimMac.Models;
+namespace LatticeLab.Models;
 
 public enum PortSide
 {

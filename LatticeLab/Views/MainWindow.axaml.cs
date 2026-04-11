@@ -9,13 +9,13 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using GateSimMac.Logic;
-using GateSimMac.Models;
+using LatticeLab.Logic;
+using LatticeLab.Models;
 using Gates;
 using Gates.IOGates;
 using ShapePath = Avalonia.Controls.Shapes.Path;
 
-namespace GateSimMac.Views;
+namespace LatticeLab.Views;
 
 public partial class MainWindow : Window
 {
@@ -272,7 +272,7 @@ public partial class MainWindow : Window
             AllowMultiple = false,
             FileTypeFilter = new[]
             {
-                new FilePickerFileType("GateSim Circuit")
+                new FilePickerFileType("Lattice Lab Circuit")
                 {
                     Patterns = new[] { "*.gcg", "*.gcf", "*.ic" },
                 },

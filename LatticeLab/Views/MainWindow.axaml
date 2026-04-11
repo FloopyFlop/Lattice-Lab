@@ -3,12 +3,12 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        x:Class="GateSimMac.Views.MainWindow"
+        x:Class="LatticeLab.Views.MainWindow"
         Width="1560"
         Height="960"
         MinWidth="1200"
         MinHeight="760"
-        Title="Logic Gate Simulator (Classic Compatibility)"
+        Title="Lattice Lab"
         FontFamily="Tahoma, Segoe UI, Arial, sans-serif"
         Background="#FFECE9D8">
   <Window.Styles>
@@ -100,29 +100,29 @@
       <Grid ColumnDefinitions="Auto,16,*,16,280">
         <StackPanel Orientation="Horizontal" Spacing="4">
           <Button Name="NewButton" Click="NewButton_Click" ToolTip.Tip="New Circuit">
-            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/NewDocumentHS.png" />
+            <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/NewDocumentHS.png" />
           </Button>
           <Button Name="OpenButton" Click="OpenButton_Click" ToolTip.Tip="Open .gcg/.gcf/.ic">
-            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/openHS.png" />
+            <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/openHS.png" />
           </Button>
           <Button Name="ReloadButton" Click="ReloadButton_Click" ToolTip.Tip="Reload Current File" IsEnabled="False">
-            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/RefreshDocViewHS.png" />
+            <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/RefreshDocViewHS.png" />
           </Button>
 
           <Border Width="1" Height="20" Background="#FFD0D0D0" Margin="6,0" />
 
           <Button Name="DeleteButton" Click="DeleteButton_Click" ToolTip.Tip="Delete Selected Gate">
-            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/DeleteHS.png" />
+            <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/DeleteHS.png" />
           </Button>
           <Button Name="CreateComponentButton"
                   Click="CreateComponentButton_Click"
                   ToolTip.Tip="Create Custom Component from Current Circuit"
                   Content="Create Component" />
           <ToggleButton Name="ShowTfToggle" IsChecked="True" Checked="ShowTfToggle_Changed" Unchecked="ShowTfToggle_Changed" ToolTip.Tip="Show True/False Coloring">
-            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/wire_color.png" />
+            <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/wire_color.png" />
           </ToggleButton>
           <ToggleButton Name="EndUserToggle" Checked="EndUserToggle_Changed" Unchecked="EndUserToggle_Changed" ToolTip.Tip="End-User Mode">
-            <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/ProtectFormHS.png" />
+            <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/ProtectFormHS.png" />
           </ToggleButton>
           <ToggleButton Name="CurvyWiresToggle"
                         IsChecked="True"
@@ -208,20 +208,20 @@
         <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12" BorderBrush="#FF9E9E9E" BorderThickness="1" CornerRadius="0" Padding="10" Background="#EEFAF7EF">
           <StackPanel Spacing="8">
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-              <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/ZoomHS.png" />
+              <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/ZoomHS.png" />
               <Slider Name="ZoomSlider" Width="120" Minimum="0.25" Maximum="3.0" Value="1.0" SmallChange="0.05" LargeChange="0.25" ValueChanged="ZoomSlider_ValueChanged" />
               <Button Click="ActualSizeButton_Click" ToolTip.Tip="Actual Size">
-                <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/ActualSizeHS.png" />
+                <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/ActualSizeHS.png" />
               </Button>
               <Button Click="FitButton_Click" ToolTip.Tip="Fit Circuit">
-                <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/PageWidthHS.png" />
+                <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/PageWidthHS.png" />
               </Button>
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-              <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/turtle.png" />
+              <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/turtle.png" />
               <Slider Name="SpeedSlider" Width="120" Minimum="1" Maximum="400" Value="1" SmallChange="5" LargeChange="20" IsDirectionReversed="True" ValueChanged="SpeedSlider_ValueChanged" />
-              <Image Width="16" Height="16" Source="avares://GateSimMac/Assets/Images/hare.png" />
+              <Image Width="16" Height="16" Source="avares://LatticeLab/Assets/Images/hare.png" />
             </StackPanel>
           </StackPanel>
         </Border>
@@ -329,9 +329,9 @@
 
     <Border Grid.Row="3" BorderBrush="#FF9A9A9A" BorderThickness="0,1,0,0" Background="#FFE5E2D6" Padding="8,4">
       <Grid ColumnDefinitions="Auto,16,Auto,16,Auto,*,*">
-        <TextBlock Grid.Column="0" Text="Logic Gate Simulator" FontWeight="SemiBold" />
-        <TextBlock Grid.Column="2" Text="v1.4 compatibility" />
-        <TextBlock Grid.Column="4" Text="kolls.net/gatesim" />
+        <TextBlock Grid.Column="0" Text="Lattice Lab" FontWeight="SemiBold" />
+        <TextBlock Grid.Column="2" Text="retro logic sandbox" />
+        <TextBlock Grid.Column="4" Text="custom iteration" />
         <TextBlock Grid.Column="6" Name="InfoLineText" Text="Ready" TextTrimming="CharacterEllipsis" />
       </Grid>
     </Border>
